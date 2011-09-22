@@ -1,9 +1,9 @@
 /* This file is auto generated, version 2 */
 /*  PREEMPT */
 #define UTS_MACHINE "arm"
-#define UTS_VERSION "#2 PREEMPT Wed Aug 31 14:16:16 KST 2011"
-#define LINUX_COMPILE_TIME "14:16:16"
-#define LINUX_COMPILE_BY "k.sridhar"
-#define LINUX_COMPILE_HOST "sep-33"
-#define LINUX_COMPILE_DOMAIN "(none)"
-#define LINUX_COMPILER "gcc version 4.4.1 (Sourcery G++ Lite 2009q3-67) "
+#define UTS_VERSION "#2 PREEMPT Thu Sep 22 09:25:12 PDT 2011"
+#define LINUX_COMPILE_TIME "09:25:12"
+#define LINUX_COMPILE_BY "imoseyon"
+#define LINUX_COMPILE_HOST "ubuntu"
+#define LINUX_COMPILE_DOMAIN "corp.meebo.com"
+#define LINUX_COMPILER "gcc version 4.4.5 (Ubuntu/Linaro 4.4.4-14ubuntu4) "
