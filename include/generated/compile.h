@@ -1,8 +1,8 @@
-/* This file is auto generated, version 2 */
+/* This file is auto generated, version 7 */
 /*  PREEMPT */
 #define UTS_MACHINE "arm"
-#define UTS_VERSION "#2 PREEMPT Thu Sep 22 09:25:12 PDT 2011"
-#define LINUX_COMPILE_TIME "09:25:12"
+#define UTS_VERSION "#7 PREEMPT Fri Sep 23 06:38:13 PDT 2011"
+#define LINUX_COMPILE_TIME "06:38:13"
 #define LINUX_COMPILE_BY "imoseyon"
 #define LINUX_COMPILE_HOST "ubuntu"
 #define LINUX_COMPILE_DOMAIN "corp.meebo.com"
