@@ -20,6 +20,9 @@
 #include <plat/map-base.h>
 #include <mach/regs-clock.h>
 #include "wm8994_samsung.h"
+#ifdef CONFIG_SND_VOODOO
+#include "../wm8994_voodoo.h"
+#endif
 
 /*
  * Debug Feature
@@ -2638,6 +2641,9 @@ void wm8994_set_headset_common(struct snd_soc_codec *codec,
 	val |= (WM8994_HPOUT1R_MUTE_N);
 	wm8994_write(codec, WM8994_RIGHT_OUTPUT_VOLUME, val);
 
+#ifdef CONFIG_SND_VOODOO_RECORD_PRESETS
+	voodoo_hook_record_main_mic();
+#endif
 }
 
 void wm8994_disable_fmradio_path(struct snd_soc_codec *codec,
