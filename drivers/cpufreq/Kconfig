@@ -197,4 +197,10 @@ config CPU_FREQ_GOV_SMARTASS2
            'smartass' - a "smart" optimized governor for the hero!
             If in doubt, say N.
 
+config CPU_FREQ_GOV_INTERACTIVE`
+        tristate "'interactiveX' cpufreq governor"
+        depends on CPU_FREQ
+        help
+	   I like this governor!
+
 endif	# CPU_FREQ
