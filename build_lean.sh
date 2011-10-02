@@ -5,6 +5,10 @@ OPT=0
 
 echo "imoseyon_leanKernel_i500_voodoo_$1" > initramfs_root/kernel_version
 
+cp drivers/staging/ramzswap/ramzswap.ko initramfs_root/lib/modules
+cp lib/lzo/lzo_compress.ko initramfs_root/lib/modules
+cp lib/lzo/lzo_decompress.ko initramfs_root/lib/modules
+
 rm usr/*.o usr/*.lzma usr/*.gz usr/*.cpio
 
 #make -j$CPU_JOB_NUM ARCH=arm CROSS_COMPILE=$TOOLCHAIN/$TOOLCHAIN_PREFIX modules
