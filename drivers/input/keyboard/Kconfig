@@ -493,14 +493,4 @@ config KEYPAD_S3C_MSM
 	  module will be called s3c-keypad.
 
 endchoice
-
-
-config KEYPAD_CYPRESS_TOUCH_BLN
-	bool "Cypress touch keypad: use backlight notification"
-	depends on KEYPAD_CYPRESS_TOUCH
-	default y
-	help
-	  Say Y here to enable the backlight notification
-	  for android led-notification (modified liblight needed)
-
 endif
