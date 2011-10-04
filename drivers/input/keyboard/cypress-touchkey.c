@@ -1,6 +1,7 @@
 /*
  * Copyright 2006-2010, Cypress Semiconductor Corporation.
  * Copyright (C) 2010, Samsung Electronics Co. Ltd. All Rights Reserved.
+ * Copyright (C) 2011, Michael Richter (alias neldar)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,6 +29,11 @@
 #include <linux/earlysuspend.h>
 #include <linux/input/cypress-touchkey.h>
 
+#ifdef CONFIG_GENERIC_BLN
+#include <linux/bln.h>
+#include <linux/miscdevice.h>
+#endif
+
 #if defined CONFIG_MACH_VICTORY
 #include <mach/gpio.h>
 #include <mach/gpio-victory.h>
@@ -44,6 +50,163 @@
 #define OLD_BACKLIGHT_OFF	0x2
 
 #define DEVICE_NAME "cypress-touchkey"
+
+#ifdef CONFIG_GENERIC_BLN
+	/* FIXME: keep a reference to the devdata, reason: i2c_touchkey_write_byte()*/
+	struct cypress_touchkey_devdata *bln_devdata;
+
+// imoseyon hack
+
+#define IRQ_TOUCH_INT (IRQ_EINT_GROUP22_BASE + 1)
+struct i2c_touchkey_driver {
+        struct i2c_client *client;
+        struct input_dev *input_dev;
+        struct early_suspend early_suspend;
+};
+struct i2c_touchkey_driver *touchkey_driver = NULL;
+
+static int touchkey_keycode[5] =
+    { NULL, KEY_BACK, KEY_MENU, KEY_ENTER, KEY_END };
+
+static int touchkey_enable = 0;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#if 0
+static void melfas_touchkey_early_suspend(struct early_suspend *h)
+{
+        touchkey_enable = 0;
+//        set_touchkey_debug('S');
+        printk(KERN_DEBUG "melfas_touchkey_early_suspend\n");
+        if (touchkey_enable < 0) {
+                printk("---%s---touchkey_enable: %d\n", __FUNCTION__,
+                       touchkey_enable);
+                return;
+        }
+
+        disable_irq(IRQ_TOUCH_INT);
+        touchkey_power_off_with_i2c();
+        gpio_direction_output(_3_GPIO_TOUCH_CE, 0);
+        gpio_direction_output(_3_TOUCH_SDA_28V, 0);
+        gpio_direction_output(_3_TOUCH_SCL_28V, 0);
+}
+
+static void melfas_touchkey_early_resume(struct early_suspend *h)
+{
+//        set_touchkey_debug('R');
+        printk(KERN_DEBUG "melfas_touchkey_early_resume\n");
+        if (touchkey_enable < 0) {
+                printk("---%s---touchkey_enable: %d\n", __FUNCTION__,
+                       touchkey_enable);
+                return;
+        }
+        touchkey_power_on();
+//        gpio_direction_output(_3_GPIO_TOUCH_CE, 1);
+        msleep(50);
+
+        //clear interrupt
+        if (readl(gpio_pend_mask_mem) & (0x1 << 1))
+                writel(readl(gpio_pend_mask_mem) | (0x1 << 1),
+                       gpio_pend_mask_mem);
+
+        enable_irq(IRQ_TOUCH_INT);
+        touchkey_enable = 1;
+
+}
+#endif
+#endif
+static int i2c_touchkey_probe(struct i2c_client *client,
+                              const struct i2c_device_id *id)
+{
+//      struct i2c_touchkey_driver * state;
+        struct device *dev = &client->dev;
+        struct input_dev *input_dev;
+        int err = 0;
+
+        printk("melfas i2c_touchkey_probe\n");
+
+        touchkey_driver =
+            kzalloc(sizeof(struct i2c_touchkey_driver), GFP_KERNEL);
+        if (touchkey_driver == NULL) {
+                dev_err(dev, "failed to create our state\n");
+                return -ENOMEM;
+        }
+
+        touchkey_driver->client = client;
+
+        touchkey_driver->client->irq = IRQ_TOUCH_INT;
+        strlcpy(touchkey_driver->client->name, "melfas-touchkey",
+                I2C_NAME_SIZE);
+
+        // i2c_set_clientdata(client, state);
+
+        input_dev = input_allocate_device();
+
+        if (!input_dev)
+                return -ENOMEM;
+
+        touchkey_driver->input_dev = input_dev;
+
+        input_dev->name = DEVICE_NAME;
+        input_dev->phys = "melfas-touchkey/input0";
+        input_dev->id.bustype = BUS_HOST;
+
+        set_bit(EV_SYN, input_dev->evbit);
+        set_bit(EV_KEY, input_dev->evbit);
+        set_bit(touchkey_keycode[1], input_dev->keybit);
+        set_bit(touchkey_keycode[2], input_dev->keybit);
+        set_bit(touchkey_keycode[3], input_dev->keybit);
+        set_bit(touchkey_keycode[4], input_dev->keybit);
+
+        err = input_register_device(input_dev);
+        if (err) {
+                input_free_device(input_dev);
+                return err;
+        }
+
+//        gpio_pend_mask_mem = ioremap(INT_PEND_BASE, 0x10);
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+//        touchkey_driver->early_suspend.suspend = melfas_touchkey_early_suspend;
+//        touchkey_driver->early_suspend.resume = melfas_touchkey_early_resume;
+//        register_early_suspend(&touchkey_driver->early_suspend);
+#endif                          /* CONFIG_HAS_EARLYSUSPEND */
+
+        touchkey_enable = 1;
+
+#if 0
+        if (request_irq
+            (IRQ_TOUCH_INT, touchkey_interrupt, IRQF_DISABLED, DEVICE_NAME,
+             NULL)) {
+                printk(KERN_ERR "%s Can't allocate irq ..\n", __FUNCTION__);
+                return -EBUSY;
+        }
+#endif
+
+//        set_touchkey_debug('K');
+        return 0;
+}
+
+static const struct i2c_device_id melfas_touchkey_id[] = {
+        {"melfas_touchkey", 0},
+        {}
+};
+
+MODULE_DEVICE_TABLE(i2c, melfas_touchkey_id);
+
+struct i2c_driver touchkey_i2c_driver2 = {
+        .driver = {
+                   .name = "melfas_touchkey_driver",
+                   },
+        .id_table = melfas_touchkey_id,
+        .probe = i2c_touchkey_probe,
+};
+
+static struct miscdevice touchkey_update_device = {
+        .minor = MISC_DYNAMIC_MINOR,
+        .name = "melfas_touchkey",
+//        .fops = &touchkey_update_fops,
+};
+#endif
 
 struct cypress_touchkey_devdata {
 	struct i2c_client *client;
@@ -171,6 +334,13 @@ static ssize_t touch_control_enable_disable(struct device *dev,
 #if defined CONFIG_MACH_VICTORY
 		gpio_direction_output(_3_GPIO_TOUCH_EN, TOUCHKEY_OFF);
 #else		
+#ifdef CONFIG_GENERIC_BLN
+       /*
+        * Disallow powering off the touchkey controller
+        * while a led notification is ongoing
+        */
+       if(!bln_is_ongoing())
+#endif
 		if(devdata_led->pdata->touchkey_onoff)
 			devdata_led->pdata->touchkey_onoff(TOUCHKEY_OFF);
 #endif	
@@ -389,7 +559,48 @@ static void cypress_touchkey_early_resume(struct early_suspend *h)
 #endif
 
 static DEVICE_ATTR(brightness, 0660, NULL,touch_led_control);
-static DEVICE_ATTR(enable_disable, 0660, NULL,touch_control_enable_disable);
+static DEVICE_ATTR(enable_disable, 0664, NULL,touch_control_enable_disable);
+
+
+#ifdef CONFIG_GENERIC_BLN
+static int cypress_enable_touchkey_backlights(int led_mask)
+{
+       return i2c_touchkey_write_byte(bln_devdata, bln_devdata->backlight_on);
+}
+
+static int cypress_disable_touchkey_backlights(int led_mask)
+{
+       return i2c_touchkey_write_byte(bln_devdata, bln_devdata->backlight_off);
+}
+
+static int cypress_power_on_touchkey_controller(void)
+{
+       if(bln_devdata->is_powering_on) {
+               bln_devdata->pdata->touchkey_onoff(TOUCHKEY_ON);
+               return 0;
+       } else {
+               return -EBUSY;
+       }
+}
+
+static int cypress_power_off_touchkey_controller(void)
+{
+       if(bln_devdata->is_powering_on) {
+               bln_devdata->pdata->touchkey_onoff(TOUCHKEY_OFF);
+               return 0;
+       } else {
+               return -EBUSY;
+       }
+}
+
+static struct bln_implementation cypress_touchkey_bln = {
+       .enable = cypress_enable_touchkey_backlights,
+       .disable = cypress_disable_touchkey_backlights,
+       .power_on = cypress_power_on_touchkey_controller,
+       .power_off = cypress_power_off_touchkey_controller,
+       .led_count = 1
+};
+#endif
 
 extern struct class *sec_class;
 struct device *ts_key_dev;
@@ -513,6 +724,10 @@ static int cypress_touchkey_probe(struct i2c_client *client,
 
 	devdata->is_powering_on = false;
 
+#ifdef CONFIG_GENERIC_BLN
+	bln_devdata = devdata;
+#endif
+
 	return 0;
 
 err_req_irq:
@@ -534,7 +749,7 @@ err_null_keycodes:
 static int __devexit i2c_touchkey_remove(struct i2c_client *client)
 {
 	struct cypress_touchkey_devdata *devdata = i2c_get_clientdata(client);
-
+	
 	unregister_early_suspend(&devdata->early_suspend);
 	/* If the device is dead IRQs are disabled, we need to rebalance them */
 	if (unlikely(devdata->is_dead))
@@ -566,11 +781,47 @@ struct i2c_driver touchkey_i2c_driver = {
 static int __init touchkey_init(void)
 {
 	int ret = 0;
+#ifdef CONFIG_GENERIC_BLN
+	int ret2 = 0;
+#endif
 
 	ret = i2c_add_driver(&touchkey_i2c_driver);
 	if (ret)
 		pr_err("%s: cypress touch keypad registration failed. (%d)\n",
 				__func__, ret);
+
+#ifdef CONFIG_GENERIC_BLN
+	register_bln_implementation(&cypress_touchkey_bln);
+
+       // imoseyon hack
+
+        ret2 = misc_register(&touchkey_update_device);
+        if (ret) {
+                printk("%s misc_register fail\n", __FUNCTION__);
+        }
+
+        if (device_create_file
+            (touchkey_update_device.this_device, &dev_attr_brightness) < 0) {
+                printk("%s device_create_file fail dev_attr_touch_update\n",
+                       __FUNCTION__);
+                pr_err("Failed to create device file(%s)!\n",
+                       dev_attr_brightness.attr.name);
+        }
+
+        if (device_create_file
+            (touchkey_update_device.this_device,
+             &dev_attr_enable_disable) < 0) {
+                printk("%s device_create_file fail dev_attr_touch_update\n",
+                       __FUNCTION__);
+                pr_err("Failed to create device file(%s)!\n",
+                       dev_attr_enable_disable.attr.name);
+        }
+
+       ret2 = i2c_add_driver(&touchkey_i2c_driver2);
+       if (ret2) pr_err("%s: melfas registration failed. (%d)\n", __func__, ret2);
+       //
+
+#endif
 
 	return ret;
 }
@@ -578,6 +829,10 @@ static int __init touchkey_init(void)
 static void __exit touchkey_exit(void)
 {
 	i2c_del_driver(&touchkey_i2c_driver);
+#ifdef CONFIG_GENERIC_BLN
+       i2c_del_driver(&touchkey_i2c_driver2);
+        misc_deregister(&touchkey_update_device);
+#endif
 }
 
 late_initcall(touchkey_init);
