@@ -397,8 +397,7 @@ static void cpufreq_smartass_freq_change_time_work(struct work_struct *work)
 			       old_freq,policy->cur);
 			new_freq = old_freq;
 		}
-//		else if (ramp_dir > 0 && nr_running() > 1) {
-		else if (ramp_dir > 0) {
+		else if (ramp_dir > 0 && nr_running() > 1) {
 			// ramp up logic:
 			if (old_freq < this_smartass->ideal_speed)
 				new_freq = this_smartass->ideal_speed;
@@ -436,8 +435,8 @@ static void cpufreq_smartass_freq_change_time_work(struct work_struct *work)
 		       // before the work task gets to run?
 		       // This may also happen if we refused to ramp up because the nr_running()==1
 			new_freq = old_freq;
-//			dprintk(SMARTASS_DEBUG_ALG,"smartassQ @ %d nothing: ramp_dir=%d nr_running=%lu\n",
-//				old_freq,ramp_dir,nr_running());
+			dprintk(SMARTASS_DEBUG_ALG,"smartassQ @ %d nothing: ramp_dir=%d nr_running=%lu\n",
+				old_freq,ramp_dir,nr_running());
 		}
 
 		// do actual ramp up (returns 0, if frequency change failed):
