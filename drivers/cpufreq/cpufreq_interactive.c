@@ -28,6 +28,10 @@
 
 #include <asm/cputime.h>
 
+#define NR_RUNNING_ADDR 0xc03d6540
+static uint nr_running_addr = NR_RUNNING_ADDR;
+static unsigned long (*nr_running_k)(void);
+
 static void (*pm_idle_old)(void);
 static atomic_t active_count = ATOMIC_INIT(0);
 
@@ -104,7 +108,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 		if (policy->cur == policy->max)
 			return;
 
-		if (nr_running() < 1)
+		if (nr_running_k() < 1)
 			return;
 
 		// imoseyon - when over 1.8Ghz jump less
@@ -131,7 +135,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	 * Do not setup the timer if there is no scheduled work.
 	 */
 	t = &per_cpu(cpu_timer, data);
-	if (!timer_pending(t) && nr_running() > 0) {
+	if (!timer_pending(t) && nr_running_k() > 0) {
 			*cpu_time_in_idle = get_cpu_idle_time_us(
 					data, cpu_idle_exit_time);
 			mod_timer(t, jiffies + 2);
@@ -213,7 +217,7 @@ static void cpufreq_interactive_freq_change_time_work(struct work_struct *work)
 			  // avoid quick jump from lowest to highest
 			  target_freq = resume_speed;
 			}
-			if (nr_running() == 1) {
+			if (nr_running_k() == 1) {
 				cpumask_clear_cpu(cpu, &work_cpumask);
 				return;
 			}
@@ -357,6 +361,7 @@ static int __init cpufreq_interactive_init(void)
 	unsigned int i;
 	struct timer_list *t;
 	min_sample_time = DEFAULT_MIN_SAMPLE_TIME;
+	nr_running_k = (void *) nr_running_addr;
 
 	/* Initalize per-cpu timers */
 	for_each_possible_cpu(i) {
