@@ -17,3 +17,4 @@ cp .config arch/arm/configs/leani510_defconfig
 #rm /tmp/*.zip
 #cp *.zip /tmp
 find . -name "*.ko" | xargs /usr/bin/arm-linux-gnueabi-strip --strip-unneeded
+find . -name "*.ko" | xargs -i cp -f {} /tmp
