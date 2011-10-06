@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.35.7
-# Tue Oct  4 20:08:07 2011
+# Wed Oct  5 09:00:35 2011
 #
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
@@ -973,7 +973,7 @@ CONFIG_IFB=y
 # CONFIG_BONDING is not set
 # CONFIG_MACVLAN is not set
 # CONFIG_EQUALIZER is not set
-# CONFIG_TUN is not set
+CONFIG_TUN=m
 # CONFIG_VETH is not set
 # CONFIG_NET_ETHERNET is not set
 CONFIG_NETDEV_1000=y
