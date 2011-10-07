@@ -815,17 +815,22 @@ manage_logs()
 readd_boot_animation()
 {
 	echo >> init.rc
-	if test -f /data/local/bootanimation.zip || test -f /system/media/bootanimation.zip; then
+        if test -f /data/local/bootanimation.zip || test -f /system/media/bootanimation.zip || -f /system/media/sanim.zip; then 
 		echo 'service bootanim /system/bin/bootanimation
 			user graphics
 			group graphics
-			disabled
 			oneshot' >> init.rc
 	else
-		echo 'service playlogos1 /system/bin/playlogos1
-			user root
-			oneshot' >> init.rc
+                echo 'service samsungani /system/bin/samsungani
+                        user graphics
+                        group graphics
+                        disabled
+                        oneshot' >> init.rc
 	fi
+        if test -f /system/media/bootsound.mp3; then
+          madplay -Q -t 15 -A -15 -o wave:- /system/media/bootsound.mp3 > /system/etc/PowerOn.wav
+          rm /system/media/bootsound.mp3
+        fi
 }
 
 
