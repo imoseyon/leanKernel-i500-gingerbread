@@ -4,7 +4,12 @@ ZRAMSIZE=$(($RAMSIZE*100))
 if [ $1 ]; then
   mount -o rw,remount /system /system
   if [ $1 == "enable" ]; then
+	if [ ! -d /etc/init.d ]; then
+		mkdir /etc/init.d
+	fi
 	echo "#!/system/bin/sh" > /etc/init.d/05zram
+	echo "insmod /lib/modules/lzo_compress.ko" >> /etc/init.d/05zram
+	echo "insmod /lib/modules/lzo_decompress.ko" >> /etc/init.d/05zram
 	echo "insmod /lib/modules/zram.ko" >> /etc/init.d/05zram
 	echo "echo 1 > /sys/block/zram0/reset" >> /etc/init.d/05zram
 	echo "echo $ZRAMSIZE > /sys/block/zram0/disksize" >> /etc/init.d/05zram
@@ -21,6 +26,6 @@ if [ $1 ]; then
 	echo "zram deactivated and disabled"
   fi
   mount -o ro,remount /system /system
-else
-  free | tail -1 
 fi
+echo
+free | grep Swap
