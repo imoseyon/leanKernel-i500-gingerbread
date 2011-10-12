@@ -35,9 +35,6 @@
 #include <asm/cputime.h>
 #include <linux/earlysuspend.h>
 
-#define NR_RUNNING_ADDR 0xc03d6540
-static uint nr_running_addr = NR_RUNNING_ADDR;
-static unsigned long (*nr_running_k)(void);
 
 /******************** Tunable parameters: ********************/
 
@@ -46,7 +43,7 @@ static unsigned long (*nr_running_k)(void);
  * towards the ideal frequency and slower after it has passed it. Similarly,
  * lowering the frequency towards the ideal frequency is faster than below it.
  */
-#define DEFAULT_AWAKE_IDEAL_FREQ 800000
+#define DEFAULT_AWAKE_IDEAL_FREQ 518400
 static unsigned int awake_ideal_freq;
 
 /*
@@ -55,7 +52,7 @@ static unsigned int awake_ideal_freq;
  * that practically when sleep_ideal_freq==0 the awake_ideal_freq is used
  * also when suspended).
  */
-#define DEFAULT_SLEEP_IDEAL_FREQ 400000
+#define DEFAULT_SLEEP_IDEAL_FREQ 352000
 static unsigned int sleep_ideal_freq;
 
 /*
@@ -63,7 +60,7 @@ static unsigned int sleep_ideal_freq;
  * Zero disables and causes to always jump straight to max frequency.
  * When below the ideal freqeuncy we always ramp up to the ideal freq.
  */
-#define DEFAULT_RAMP_UP_STEP 200000
+#define DEFAULT_RAMP_UP_STEP 128000
 static unsigned int ramp_up_step;
 
 /*
@@ -71,7 +68,7 @@ static unsigned int ramp_up_step;
  * Zero disables and will calculate ramp down according to load heuristic.
  * When above the ideal freqeuncy we always ramp down to the ideal freq.
  */
-#define DEFAULT_RAMP_DOWN_STEP 100000
+#define DEFAULT_RAMP_DOWN_STEP 256000
 static unsigned int ramp_down_step;
 
 /*
@@ -400,7 +397,7 @@ static void cpufreq_smartass_freq_change_time_work(struct work_struct *work)
 			       old_freq,policy->cur);
 			new_freq = old_freq;
 		}
-		else if (ramp_dir > 0 && nr_running_k() > 1) {
+		else if (ramp_dir > 0 && nr_running() > 1) {
 			// ramp up logic:
 			if (old_freq < this_smartass->ideal_speed)
 				new_freq = this_smartass->ideal_speed;
@@ -436,10 +433,10 @@ static void cpufreq_smartass_freq_change_time_work(struct work_struct *work)
 		}
 		else { // ramp_dir==0 ?! Could the timer change its mind about a queued ramp up/down
 		       // before the work task gets to run?
-		       // This may also happen if we refused to ramp up because the nr_running_k()==1
+		       // This may also happen if we refused to ramp up because the nr_running()==1
 			new_freq = old_freq;
 			dprintk(SMARTASS_DEBUG_ALG,"smartassQ @ %d nothing: ramp_dir=%d nr_running=%lu\n",
-				old_freq,ramp_dir,nr_running_k());
+				old_freq,ramp_dir,nr_running());
 		}
 
 		// do actual ramp up (returns 0, if frequency change failed):
@@ -815,8 +812,6 @@ static int __init cpufreq_smartass_init(void)
 	max_cpu_load = DEFAULT_MAX_CPU_LOAD;
 	min_cpu_load = DEFAULT_MIN_CPU_LOAD;
 
-        nr_running_k = (void *) nr_running_addr;
-
 	spin_lock_init(&cpumask_lock);
 
 	suspended = 0;
@@ -870,4 +865,3 @@ module_exit(cpufreq_smartass_exit);
 MODULE_AUTHOR ("Erasmux");
 MODULE_DESCRIPTION ("'cpufreq_smartass2' - A smart cpufreq governor");
 MODULE_LICENSE ("GPL");
-
