@@ -64,7 +64,7 @@ static unsigned int samples = 0;
 static unsigned long min_sample_time;
 
 static unsigned int freq_threshold = 1400000;
-static unsigned int resume_speed = 1000000;
+static unsigned int resume_speed = 800000;
 
 static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 		unsigned int event);
