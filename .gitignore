@@ -47,3 +47,10 @@ usr/gen_init_cpio
 !initramfs_root/lib/modules/*.ko
 .version
 .config
+.tmp*
+include/generated/asm-offsets.h
+include/generated/bounds.h
+include/linux/intel-gtt.h
+initramfs_root/lib/modules/lzo_compress.ko
+initramfs_root/lib/modules/lzo_decompress.ko
+initramfs_root/lib/modules/zram.ko
