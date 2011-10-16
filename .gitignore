@@ -47,3 +47,4 @@ usr/gen_init_cpio
 !initramfs_root/lib/modules/*.ko
 .version
 .config
+.tmp*
