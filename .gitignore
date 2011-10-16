@@ -48,3 +48,5 @@ usr/gen_init_cpio
 .version
 .config
 .tmp*
+include/generated/asm-offsets.h
+include/generated/bounds.h
