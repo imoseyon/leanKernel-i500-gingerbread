@@ -722,8 +722,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 
 		mutex_init(&this_dbs_info->timer_mutex);
 		dbs_timer_init(this_dbs_info);
-                register_early_suspend(&ondemand_power_suspend);
-                pr_info("[imoseyon] ondemand active\n");
+//                register_early_suspend(&ondemand_power_suspend);
+//                pr_info("[imoseyon] ondemand active\n");
 		break;
 
 	case CPUFREQ_GOV_STOP:
@@ -736,8 +736,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		if (!dbs_enable)
 			sysfs_remove_group(cpufreq_global_kobject,
 					   &dbs_attr_group);
-                unregister_early_suspend(&ondemand_power_suspend);
-                pr_info("[imoseyon] ondemand inactive\n");
+//                unregister_early_suspend(&ondemand_power_suspend);
+//               pr_info("[imoseyon] ondemand inactive\n");
 		break;
 
 	case CPUFREQ_GOV_LIMITS:
