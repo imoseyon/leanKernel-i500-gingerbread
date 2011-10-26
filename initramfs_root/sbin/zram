@@ -15,6 +15,7 @@ if [ $1 ]; then
 	echo "echo $ZRAMSIZE > /sys/block/zram0/disksize" >> /etc/init.d/05zram
 	echo "mkswap /dev/block/zram0" >> /etc/init.d/05zram
 	echo "swapon /dev/block/zram0" >> /etc/init.d/05zram
+	echo '"500,1000,4096,6144,10240,12288" > /sys/module/lowmemorykiller/parameters/minfree'  >> /etc/init.d/05zram
 	chmod 555 /etc/init.d/05zram
 	/etc/init.d/05zram
 	echo "zram enabled and activated"
