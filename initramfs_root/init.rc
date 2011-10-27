@@ -571,6 +571,9 @@ on boot
     write /proc/sys/vm/dirty_ratio  65
     write /proc/sys/vm/vfs_cache_pressure  40
 
+    # enable deep idle
+    write /sys/class/misc/deepidle/enabled 1
+
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state
     chown radio system /sys/android_power/request_state
