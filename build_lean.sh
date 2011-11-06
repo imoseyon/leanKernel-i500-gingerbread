@@ -17,4 +17,7 @@ cp .config arch/arm/configs/leani510_defconfig
 #rm /tmp/*.zip
 #cp *.zip /tmp
 find . -name "*.ko" | xargs /usr/bin/arm-linux-gnueabi-strip --strip-unneeded
-find . -name "*.ko" | xargs -i cp -f {} /data/utils/charge-gb/charge_repack_voodoo/initramfs_root/lib/modules
+#find . -name "*.ko" | xargs -i cp -f {} /data/utils/charge-gb/charge_repack_voodoo/initramfs_root/lib/modules
+cp drivers/staging/zram/zram.ko /data/utils/charge-gb/charge_repack_voodoo/initramfs_root/lib/modules
+cp lib/lzo/lzo_decompress.ko /data/utils/charge-gb/charge_repack_voodoo/initramfs_root/lib/modules
+cp lib/lzo/lzo_compress.ko /data/utils/charge-gb/charge_repack_voodoo/initramfs_root/lib/modules
