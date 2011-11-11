@@ -52,7 +52,7 @@ static DEFINE_MUTEX(set_freq_lock);
 
 /* frequency */
 static struct cpufreq_frequency_table freq_table[] = {
-	{L0, 1000*1000},
+	{L0, 1200*1000},
 	{L1, 800*1000},
 	{L2, 400*1000},
 	{L3, 200*1000},
@@ -89,11 +89,11 @@ static struct s5pv210_dvs_conf dvs_conf[] = {
 		.int_volt   = 1100000,
 	},
 	[L3] = {
-		.arm_volt   = 950000,
+		.arm_volt   = 900000,
 		.int_volt   = 1100000,
 	},
 	[L4] = {
-		.arm_volt   = 950000,
+		.arm_volt   = 900000,
 		.int_volt   = 1000000,
 	},
 };
@@ -104,7 +104,9 @@ static u32 clkdiv_val[5][11] = {
 	 * MFC, G3D }
 	 */
 	/* L0 : [1000/200/200/100][166/83][133/66][200/200] */
-	{0, 4, 4, 1, 3, 1, 4, 1, 3, 0, 0},
+//	{0, 4, 4, 1, 3, 1, 4, 1, 3, 0, 0},
+	/* L0 : [1200/200/200/100][166/83][133/66][200/200] */
+	{0, 5, 5, 1, 3, 1, 4, 1, 3, 0, 0},
 	/* L1 : [800/200/200/100][166/83][133/66][200/200] */
 	{0, 3, 3, 1, 3, 1, 4, 1, 3, 0, 0},
 	/* L2 : [400/200/200/100][166/83][133/66][200/200] */
@@ -117,8 +119,8 @@ static u32 clkdiv_val[5][11] = {
 
 static struct s3c_freq clk_info[] = {
 	[L0] = {	/* L0: 1GHz */
-		.fclk       = 1000000,
-		.armclk     = 1000000,
+		.fclk       = 1200000,
+		.armclk     = 1200000,
 		.hclk_tns   = 0,
 		.hclk       = 133000,
 		.pclk       = 66000,
@@ -276,8 +278,8 @@ static void s5pv210_cpufreq_clksrcs_MPLL2APLL(unsigned int index,
 	 * 2-1. Set PMS values
 	 */
 	if (index == L0)
-		/* APLL FOUT becomes 1000 Mhz */
-		__raw_writel(PLL45XX_APLL_VAL_1000, S5P_APLL_CON);
+		/* APLL FOUT becomes 1200 Mhz */
+		__raw_writel(PLL45XX_APLL_VAL_1200, S5P_APLL_CON);
 	else
 		/* APLL FOUT becomes 800 Mhz */
 		__raw_writel(PLL45XX_APLL_VAL_800, S5P_APLL_CON);
