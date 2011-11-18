@@ -1,6 +1,7 @@
 #
 # Makefile for the video capture/playback device drivers.
 #
+TARGET_PRODUCT = SCH-I500
 
 tuner-objs	:=	tuner-core.o
 
