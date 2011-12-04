@@ -36,11 +36,7 @@ MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
 
 #define INPUT_DEVICES	256
-#ifdef CONFIG_MACH_FORTE
-#define QKEY_U          13
-#else
-#define QKEY_U          17
-#endif
+
 /*
  * EV_ABS events which should not be cached are listed here.
  */
@@ -336,32 +332,23 @@ void input_event(struct input_dev *dev,
 		 unsigned int type, unsigned int code, int value)
 {
 	unsigned long flags;
-	#ifdef CONFIG_MACH_ATLAS
-	bool skip_once = 0 ;
-	#endif
 	/*
 	 *  Forced upload mode key string (tkhwang)
 	 */
 #ifdef CONFIG_KERNEL_DEBUG_SEC
-	static bool first = 0, second = 0, third = 0;
-#if defined (CONFIG_KEYPAD_S3C)
-	if (strcmp(dev->name,"s3c-keypad")==0 || strcmp(dev->name,"victory-keypad") == 0 || strcmp(dev->name,"forte-keypad") == 0) {
+	static bool first = 0, second = 0;
+
+#if 0	// defined (CONFIG_KEYPAD_S3C)
+	if (strcmp(dev->name,"s3c-keypad")==0) {
 		if (value) {
 			if (code == KERNEL_SEC_FORCED_UPLOAD_1ST_KEY)
 				first =1;
-                        if (code == KEY_POWER)
-                                second = true;
-                        if (code == QKEY_U)
-				third = true;
-#ifdef CONFIG_MACH_FORTE
-                        if (first == 1 && second == 1 && third == 1){
-#else
-			if (second == 1 && third == 1){
-#endif
+			if (first==1 && code==KERNEL_SEC_FORCED_UPLOAD_2ND_KEY)
 				if ((KERNEL_SEC_DEBUG_LEVEL_MID == kernel_sec_get_debug_level()) ||
 						KERNEL_SEC_DEBUG_LEVEL_HIGH == kernel_sec_get_debug_level()) {
 					/* Display the working callstack for the debugging. */
 					dump_stack();
+
 					if (kernel_sec_viraddr_wdt_reset_reg) {
 						kernel_sec_set_cp_upload();
 						kernel_sec_save_final_context(); /* Save theh final context. */
@@ -369,57 +356,59 @@ void input_event(struct input_dev *dev,
 						kernel_sec_hw_reset(false);      /* Reboot. */
 					}
 				}
-			}
-		} else {
-				if (code==KERNEL_SEC_FORCED_UPLOAD_1ST_KEY)
-					first = 0;
-                        	if(code == KEY_POWER)
-                                	second = false;
-                        	if(code == QKEY_U)
-					third = false;
-		}
+		} else if (code==KERNEL_SEC_FORCED_UPLOAD_1ST_KEY)
+				first = 0;
 	}
-#elif 1 /*defined (CONFIG_KEYBOARD_GPIO)*/
-	if (strcmp(dev->name, "atlas-keypad") == 0) {
+#elif 1	/*defined (CONFIG_KEYBOARD_GPIO)*/
+	if ((strcmp(dev->name, "s3c-keypad") == 0) || (strcmp(dev->name, "aries-keypad") == 0)|| (strcmp(dev->name, "melfas_touchkey") == 0)) {
 		if (value) {
 			if (code == KEY_VOLUMEUP)
 				first = true;
-
+#ifdef CONFIG_MACH_VIPER
 			if (code == KEY_POWER)
 				second = true;
-
-			if (code == KEY_VOLUMEDOWN)
-				third = true;
-
+#else
+			if (code == KEY_HOME)
+				second = true;
+#endif
 			/* if(first&&second&&third) */
-			if (first == 1 && second == 1) {
+			if (first && second) {
+				printk("Forced Upload Enter!!!\n");
 				if ((KERNEL_SEC_DEBUG_LEVEL_MID == kernel_sec_get_debug_level()) ||
 						KERNEL_SEC_DEBUG_LEVEL_HIGH == kernel_sec_get_debug_level()) {
-					printk(KERN_ERR" USER Press Power key + volume key ==> Force RAM DUMP \n");
-					#ifdef CONFIG_MACH_ATLAS
-					kernel_sec_set_upload_magic_number_final();
-					skip_once = 1;	
-					#endif
+					/* Display the working callstack for the debugging. */
+					//					dump_stack();
+					dump_debug_info_forced_ramd_dump();
 
+					/* kernel_sec_set_debug_level(KERNEL_SEC_DEBUG_LEVEL_HIGH); */
+
+					if (kernel_sec_viraddr_wdt_reset_reg) {
+						pr_err("[%s][line:%d]\n", __func__, __LINE__);
+						kernel_sec_set_cp_upload();
+						/* Save theh final context. */
+						kernel_sec_save_final_context();
+						kernel_sec_set_upload_cause(UPLOAD_CAUSE_FORCED_UPLOAD);
+						/* Reboot. */
+						kernel_sec_hw_reset(false);
+					}
 				}
 			}
 		} else {
-			if(code == KEY_VOLUMEUP)
+			if (code == KEY_VOLUMEUP)
 				first = false;
-
-			if(code == KEY_POWER)
+#ifdef CONFIG_MACH_VIPER
+			if (code == KEY_POWER)
 				second = false;
-
-			if(code == KEY_VOLUMEDOWN)
-				third = false;
+#else
+			if (code == KEY_HOME)
+				second = false;
+#endif
 		}
 	}
-#endif //CONFIG_KEYPAD_S3C
-#endif //CONFIG_KERNEL_DEBUG_SEC
+#endif
 
-	#ifdef CONFIG_MACH_ATLAS
-	if(skip_once == 0) {
-	#endif
+#endif
+
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
 
 		spin_lock_irqsave(&dev->event_lock, flags);
@@ -427,9 +416,6 @@ void input_event(struct input_dev *dev,
 		input_handle_event(dev, type, code, value);
 		spin_unlock_irqrestore(&dev->event_lock, flags);
 	}
-	#ifdef CONFIG_MACH_ATLAS
-	}
-	#endif
 }
 EXPORT_SYMBOL(input_event);
 

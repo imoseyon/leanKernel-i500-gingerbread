@@ -140,6 +140,11 @@ config HAS_WAKELOCK
 config HAS_EARLYSUSPEND
 	bool
 
+config SVNET_WHITELIST
+	bool "White List"
+	depends on WAKELOCK
+	default n
+
 config WAKELOCK
 	bool "Wake lock"
 	depends on PM && RTC_CLASS

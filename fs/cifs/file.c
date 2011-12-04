@@ -2265,7 +2265,8 @@ out:
 	return rc;
 }
 
-void cifs_oplock_break(struct work_struct *work)
+static void
+cifs_oplock_break(struct slow_work *work)
 {
 	struct cifsFileInfo *cfile = container_of(work, struct cifsFileInfo,
 						  oplock_break);
@@ -2302,29 +2303,32 @@ void cifs_oplock_break(struct work_struct *work)
 				 LOCKING_ANDX_OPLOCK_RELEASE, false);
 		cFYI(1, "Oplock release rc = %d", rc);
 	}
-
-	/*
-	 * We might have kicked in before is_valid_oplock_break()
-	 * finished grabbing reference for us.  Make sure it's done by
-	 * waiting for GlobalSMSSeslock.
-	 */
-	write_lock(&GlobalSMBSeslock);
-	write_unlock(&GlobalSMBSeslock);
-
-	cifs_oplock_break_put(cfile);
 }
 
-void cifs_oplock_break_get(struct cifsFileInfo *cfile)
+static int
+cifs_oplock_break_get(struct slow_work *work)
 {
+	struct cifsFileInfo *cfile = container_of(work, struct cifsFileInfo,
+						  oplock_break);
 	mntget(cfile->mnt);
 	cifsFileInfo_get(cfile);
+	return 0;
 }
 
-void cifs_oplock_break_put(struct cifsFileInfo *cfile)
+static void
+cifs_oplock_break_put(struct slow_work *work)
 {
+	struct cifsFileInfo *cfile = container_of(work, struct cifsFileInfo,
+						  oplock_break);
 	mntput(cfile->mnt);
 	cifsFileInfo_put(cfile);
 }
+
+const struct slow_work_ops cifs_oplock_break_ops = {
+	.get_ref	= cifs_oplock_break_get,
+	.put_ref	= cifs_oplock_break_put,
+	.execute	= cifs_oplock_break,
+};
 
 const struct address_space_operations cifs_addr_ops = {
 	.readpage = cifs_readpage,

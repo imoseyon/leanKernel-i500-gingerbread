@@ -232,17 +232,7 @@ struct interrupt_data {
 #define SC_WRITE_6			0x0a
 #define SC_WRITE_10			0x2a
 #define SC_WRITE_12			0xaa
-
-#ifdef _ENABLE_CDFS_
-#undef SC_RELEASE
-#undef SC_RESERVE
-#define SC_AUTORUN_CHECK0   0x16
-#define SC_AUTORUN_CHECK1   0x17
-#ifdef _SUPPORT_MAC_
-#define SC_READ_CD          0xbe
-#endif
-#endif
-
+#define SC_READ_CD			0xbe
 
 /* SCSI Sense Key/Additional Sense Code/ASC Qualifier values */
 #define SS_NO_SENSE				0
@@ -647,20 +637,6 @@ out:
 
 static void fsg_lun_close(struct fsg_lun *curlun)
 {
-	int rc;
-
-	/*
-           * XXX: San: Ugly hack here added to ensure that
-           * our pages get synced to disk.
-           * Also drop caches here just to be extra-safe
-         */
-
-#if 0
-	rc = vfs_fsync(curlun->filp, 1);
-                if (rc < 0)
-                        printk(KERN_ERR "ums: Error syncing data (%d)\n", rc);
-#endif
-
 	if (curlun->filp) {
 		LDBG(curlun, "close backing file\n");
 		fput(curlun->filp);
@@ -766,4 +742,44 @@ static ssize_t fsg_store_ro(struct device *dev, struct device_attribute *attr,
 	}
 	up_read(filesem);
 	return rc;
+}
+
+static ssize_t fsg_store_file(struct device *dev, struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct fsg_lun	*curlun = fsg_lun_from_dev(dev);
+	struct rw_semaphore	*filesem = dev_get_drvdata(dev);
+	int		rc = 0;
+
+
+#ifndef CONFIG_USB_ANDROID_MASS_STORAGE
+	/* disabled in android because we need to allow closing the backing file
+	 * if the media was removed
+	 */
+	if (curlun->prevent_medium_removal && fsg_lun_is_open(curlun)) {
+		LDBG(curlun, "eject attempt prevented\n");
+		return -EBUSY;				/* "Door is locked" */
+	}
+#endif
+
+	/* Remove a trailing newline */
+	if (count > 0 && buf[count-1] == '\n')
+		((char *) buf)[count-1] = 0;		/* Ugh! */
+
+	/* Eject current medium */
+	down_write(filesem);
+	if (fsg_lun_is_open(curlun)) {
+		fsg_lun_close(curlun);
+		curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+	}
+
+	/* Load new medium */
+	if (count > 0 && buf[0]) {
+		rc = fsg_lun_open(curlun, buf);
+		if (rc == 0)
+			curlun->unit_attention_data =
+					SS_NOT_READY_TO_READY_TRANSITION;
+	}
+	up_write(filesem);
+	return (rc < 0 ? rc : count);
 }

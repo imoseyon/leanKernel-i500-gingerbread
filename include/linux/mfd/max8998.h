@@ -24,6 +24,11 @@
 #define __LINUX_MFD_MAX8998_H
 
 #include <linux/regulator/machine.h>
+#ifdef CONFIG_CHARGER_FAN5403
+#include <linux/fan5403_charger.h>
+#elif defined (CONFIG_CHARGER_SMB328A)
+#include <linux/smb328a_charger.h>
+#endif
 
 /* MAX 8998 regulator ids */
 enum {
@@ -70,6 +75,18 @@ enum cable_type_t {
 	CABLE_TYPE_AC,
 };
 
+enum acc_type_t {
+	ACC_TYPE_NONE = 0,
+	ACC_TYPE_USB,
+	ACC_TYPE_CHARGER,
+	ACC_TYPE_CAR_DOCK,
+	ACC_TYPE_DESK_DOCK,
+	ACC_TYPE_JIG,
+#ifdef CONFIG_WIRELESS_CHARGING
+	ACC_TYPE_WIRELESS_CHARGER,
+#endif
+};
+
 /**
  * max8998_adc_table_data
  * @adc_value : max8998 adc value
@@ -81,9 +98,11 @@ struct max8998_adc_table_data {
 };
 struct max8998_charger_callbacks {
 	void (*set_cable)(struct max8998_charger_callbacks *ptr, enum cable_type_t status);
-	void (*set_jig)(struct max8998_charger_callbacks *ptr, bool attached);
 	bool (*set_esafe)(struct max8998_charger_callbacks *ptr, u8 esafe);
+	void (*set_acc_type)(struct max8998_charger_callbacks *ptr, enum acc_type_t status);
 	bool (*get_vdcin)(struct max8998_charger_callbacks *ptr);
+	void (*charge_done)(struct max8998_charger_callbacks *ptr);	/* switching charger */
+	void (*charge_fault)(struct max8998_charger_callbacks *ptr, int reason);	/* switching charger */
 };
 
 /**
@@ -97,32 +116,27 @@ struct max8998_charger_data {
 	void (*register_callbacks)(struct max8998_charger_callbacks *ptr);
 	struct max8998_adc_table_data *adc_table;
 	int adc_array_size;
+#ifdef CONFIG_CHARGER_FAN5403
+	struct fan5403_platform_data *charger_ic;	/* FAN5403 switching charger */
+#elif defined CONFIG_CHARGER_SMB328A
+	struct smb328a_platform_data *charger_ic;	/* SMB328A switching charger */
+#endif
+	int temp_high_event_threshold;
+	int temp_high_threshold;
+	int temp_high_recovery;
+	int temp_low_recovery;
+	int temp_low_threshold;
+	int temp_high_threshold_lpm;
+	int temp_high_recovery_lpm;
+	int temp_low_recovery_lpm;
+	int temp_low_threshold_lpm;
+
+	int adc_ch_temperature;
+	int adc_ch_current;
+#ifdef CONFIG_WIRELESS_CHARGING
+	int adc_ch_wc;
+#endif
 	int termination_curr_adc;
-};
-/*
-  The S5PC110 Battery Tempreture blockage parameters
-*/
-struct s5p_batt_block_temp
-{
-	int temp_high_block;
-	int temp_high_recover;
-	int temp_low_block;
-	int temp_low_recover;
-	int temp_high_block_lpm;
-	int temp_high_recover_lpm;
-	int temp_low_block_lpm;
-	int temp_low_recover_lpm;
-	int temp_high_event_block;
-};
-/*
- * ADC Channel 
- */
-struct adc_channel_type {
-        int s3c_adc_voltage;
-        int s3c_adc_chg_current;
-        int s3c_adc_temperature;
-        int s3c_adc_v_f;
-        int s3c_adc_hw_version;
 };
 
 /**
@@ -131,9 +145,8 @@ struct adc_channel_type {
  * @num_regulators: number of regultors used
  * @irq_base: base IRQ number for max8998, required for IRQs
  * @ono: power onoff IRQ number for max8998
- * @buck1_max_voltage1: BUCK1 maximum alowed voltage register 1
- * @buck1_max_voltage2: BUCK1 maximum alowed voltage register 2
- * @buck2_max_voltage: BUCK2 maximum alowed voltage
+ * @buck1_voltage_set[4]: BUCK1 voltage preset
+ * @buck2_voltage_set[2]: BUCK2 voltage preset
  * @buck1_set1: BUCK1 gpio pin 1 to set output voltage
  * @buck1_set2: BUCK1 gpio pin 2 to set output voltage
  * @buck2_set3: BUCK2 gpio pin to set output voltage
@@ -145,12 +158,10 @@ struct max8998_platform_data {
 	int				irq_base;
 	int				ono;
 	int                             buck1_voltage_set[4];
-        int                             buck2_voltage_set[2];
+	int                             buck2_voltage_set[2];
 	int				buck1_set1;
 	int				buck1_set2;
 	int				buck2_set3;
-	struct adc_channel_type		*s3c_adc_channel;
-        struct s5p_batt_block_temp      *s5pc110_batt_block_temp;
 };
 
 #endif /*  __LINUX_MFD_MAX8998_H */

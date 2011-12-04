@@ -29,7 +29,7 @@
 #include <plat/gpio-cfg.h>
 #include <plat/regs-fb.h>
 #include <linux/earlysuspend.h>
-
+ 
 #define SLEEPMSEC		0x1000
 #define ENDDEF			0x2000
 #define DEFMASK		0xFF00
@@ -47,8 +47,6 @@ extern struct class *sec_class;
 #define gprintk(x...) do { } while (0)
 #endif
 /*******************************************************************************/
-
-struct s5p_lcd *lcdpower; 
 
 #ifdef CONFIG_FB_S3C_MDNIE
 extern void init_mdnie_class(void);
@@ -74,6 +72,8 @@ struct s5p_lcd {
 	struct device *sec_lcdtype_dev;
 	struct early_suspend    early_suspend;
 };
+
+struct s5p_lcd *lcdpower; 
 
 static int s6e63m0_spi_write_driver(struct s5p_lcd *lcd, u16 reg)
 {
@@ -203,20 +203,6 @@ static void update_acl(struct s5p_lcd *lcd)
 }
 #endif
 
-void tl2796_ldi_stand_by(void)
-{
-	struct s5p_panel_data *pdata = lcdpower->data;
-	
-	s6e63m0_panel_send_sequence(lcdpower, pdata->standby_on);
-}
-
-void tl2796_ldi_wake_up(void)
-{
-	struct s5p_panel_data *pdata = lcdpower->data;
-
-	s6e63m0_panel_send_sequence(lcdpower, pdata->standby_off);
-}
-
 static void update_brightness(struct s5p_lcd *lcd)
 {
 	struct s5p_panel_data *pdata = lcd->data;
@@ -224,7 +210,7 @@ static void update_brightness(struct s5p_lcd *lcd)
 
 	gamma_value = get_gamma_value_from_bl(lcd->bl);
 
-	gprintk("Update status brightness[0~255]:(%d) gamma_value:(%d) on_19gamma(%d)\n", lcd->bl, gamma_value, lcd->on_19gamma);
+	printk("bl:%d, gamma:%d,on_19:%d\n", lcd->bl, gamma_value, lcd->on_19gamma);
 
 #ifdef CONFIG_FB_S3C_TL2796_ACL
 	update_acl(lcd);
@@ -244,9 +230,16 @@ static void tl2796_ldi_enable(struct s5p_lcd *lcd)
 
 	mutex_lock(&lcd->lock);
 
+	s6e63m0_panel_send_sequence(lcd, pdata->seq_panel_set);
 	s6e63m0_panel_send_sequence(lcd, pdata->seq_display_set);
-	update_brightness(lcd);
+	s6e63m0_panel_send_sequence(lcd, pdata->gamma180);
 	s6e63m0_panel_send_sequence(lcd, pdata->seq_etc_set);
+
+	s6e63m0_panel_send_sequence(lcd, pdata->standby_off);
+	s6e63m0_panel_send_sequence(lcd, pdata->display_on);
+
+	update_brightness(lcd);
+	
 	lcd->ldi_enable = 1;
 
 	mutex_unlock(&lcd->lock);
@@ -407,6 +400,7 @@ void tl2796_early_suspend(struct early_suspend *h)
 	struct s5p_lcd *lcd = container_of(h, struct s5p_lcd,
 								early_suspend);
 
+	printk("%s\n",__FUNCTION__);
 	tl2796_ldi_disable(lcd);
 
 	return ;
@@ -415,15 +409,35 @@ void tl2796_late_resume(struct early_suspend *h)
 {
 	struct s5p_lcd *lcd = container_of(h, struct s5p_lcd,
 								early_suspend);
-
+	printk("%s\n",__FUNCTION__);
 	tl2796_ldi_enable(lcd);
 
 	return ;
 }
+
+static ssize_t lcd_on_off_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct s5p_panel_data *pdata = lcdpower->data;
+
+	if (size < 1)
+		return -EINVAL;
+
+	if (strnicmp(buf, "on", 2) == 0 || strnicmp(buf, "1", 1) == 0)
+		s6e63m0_panel_send_sequence(lcdpower, pdata->display_on);
+
+	else if (strnicmp(buf, "off", 3) == 0 || strnicmp(buf, "0", 1) == 0)
+		s6e63m0_panel_send_sequence(lcdpower, pdata->display_off);
+
+	return size;
+}
+
+static DEVICE_ATTR(lcd_on_off, S_IRUGO | S_IWUSR, NULL, lcd_on_off_store);
+
 static int __devinit tl2796_probe(struct spi_device *spi)
 {
 	struct s5p_lcd *lcd;
 	int ret;
+
 	lcd = kzalloc(sizeof(struct s5p_lcd), GFP_KERNEL);
 	if (!lcd) {
 		pr_err("failed to allocate for lcd\n");
@@ -482,16 +496,20 @@ static int __devinit tl2796_probe(struct spi_device *spi)
 	lcd->gammaset_class = class_create(THIS_MODULE, "gammaset");
 	if (IS_ERR(lcd->gammaset_class))
 		pr_err("Failed to create class(gammaset_class)!\n");
+
 	lcd->switch_gammaset_dev = device_create(lcd->gammaset_class, &spi->dev, 0, lcd, "switch_gammaset");
 	if (!lcd->switch_gammaset_dev) {
 		dev_err(lcd->dev, "failed to register switch_gammaset_dev\n");
 		ret = -EINVAL;
 		goto err_setup_gammaset;
 	}
+
 	if (device_create_file(lcd->switch_gammaset_dev, &dev_attr_gammaset_file_cmd) < 0)
 		pr_err("Failed to create device file(%s)!\n", dev_attr_gammaset_file_cmd.attr.name);
+
 	lcd->acl_enable = 0;
 	lcd->cur_acl = 0;
+	lcd->ldi_enable = 1;
 
 	lcd->acl_class = class_create(THIS_MODULE, "aclset");
 	if (IS_ERR(lcd->acl_class))
@@ -504,7 +522,7 @@ static int __devinit tl2796_probe(struct spi_device *spi)
 	if (device_create_file(lcd->switch_aclset_dev, &dev_attr_aclset_file_cmd) < 0)
 		pr_err("Failed to create device file(%s)!\n", dev_attr_aclset_file_cmd.attr.name);
 
-	if (sec_class == NULL)
+	 if (sec_class == NULL)
 	 	sec_class = class_create(THIS_MODULE, "sec");
 	 if (IS_ERR(sec_class))
                 pr_err("Failed to create class(sec)!\n");
@@ -515,14 +533,17 @@ static int __devinit tl2796_probe(struct spi_device *spi)
 
 	 if (device_create_file(lcd->sec_lcdtype_dev, &dev_attr_lcdtype_file_cmd) < 0)
 	 	pr_err("Failed to create device file(%s)!\n", dev_attr_lcdtype_file_cmd.attr.name);
-	
+
+	 if (device_create_file(lcd->sec_lcdtype_dev, &dev_attr_lcd_on_off) < 0)
+	 	pr_err("Failed to create device file(%s)!\n", dev_attr_lcd_on_off.attr.name);
+
 #ifdef CONFIG_FB_S3C_MDNIE
 	init_mdnie_class();  //set mDNIe UI mode, Outdoormode
 #endif
 
 	spi_set_drvdata(spi, lcd);
 
-	tl2796_ldi_enable(lcd);
+//	tl2796_ldi_enable(lcd);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	lcd->early_suspend.suspend = tl2796_early_suspend;
 	lcd->early_suspend.resume = tl2796_late_resume;

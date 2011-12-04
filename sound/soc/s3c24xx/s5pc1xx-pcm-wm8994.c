@@ -155,7 +155,7 @@ static struct snd_soc_dai_link smdkc110_dai[] = {
 
 static struct snd_soc_card smdkc110 = {
 	.name = "smdkc110-pcm",
-	.platform = &s3c24xx_soc_platform,
+	.platform = &s3c24xx_pcm_soc_platform,
 	.dai_link = smdkc110_dai,
 	.num_links = ARRAY_SIZE(smdkc110_dai),
 };

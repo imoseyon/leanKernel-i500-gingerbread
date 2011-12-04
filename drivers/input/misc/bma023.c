@@ -337,17 +337,12 @@ static int bma023_measure(struct bma023_data *bma023,
 
 	/* filter out sizzling values */
 	/* filter_filter(bma023, raw_data, filtered_data); */
-	/* filter_stabilizer(bma023, filtered_data, stabled_data); */ 
+	/* filter_stabilizer(bma023, filtered_data, stabled_data); */
 	filter_stabilizer(bma023, raw_data, stabled_data);
 
 	accel->x = stabled_data[0];
 	accel->y = stabled_data[1];
 	accel->z = stabled_data[2];
-
-#ifdef  CONFIG_MACH_VICTORY
-	accel->x = -(accel->x); 
-	accel->z = -(accel->z);
-#endif
 
 	return err;
 }
@@ -445,7 +440,7 @@ static ssize_t bma023_delay_store(struct device *dev,
 
 	if (delay > BMA023_MAX_DELAY)
 		delay = BMA023_MAX_DELAY;
-	
+
 	bma023_set_delay(dev, delay);
 
 	return count;
@@ -681,10 +676,6 @@ int bma023_read_accel_avg(struct bma023_data *bma023, int num_avg,
 	for (i = 0; i < num_avg; i++) {
 		/* read 10 acceleration data triples */
 		comres += bma023_measure(bma023, &accel);
-#ifdef  CONFIG_MACH_VICTORY
-		accel.x = -(accel.x);
-		accel.z = -(accel.z);
-#endif
 		if (accel.x > max->x)
 			max->x = accel.x;
 		if (accel.x < min->x)
@@ -789,7 +780,7 @@ int bma023_calibrate(struct bma023_data *bma023,
 				return -1;
 		}
 		/* check if calibration is needed */
-		if (min_max_ok) 
+		if (min_max_ok)
 			need_calibration
 				= bma023_calc_new_offset(orientation, avg,
 					&offset_x, &offset_y, &offset_z);
@@ -1030,4 +1021,3 @@ MODULE_DESCRIPTION("BMA023 accelerometer driver");
 MODULE_AUTHOR("tim.sk.lee@samsung.com");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(1.0.0);
-

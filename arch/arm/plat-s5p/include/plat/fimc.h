@@ -94,6 +94,10 @@ struct s3c_platform_camera {
 
 	/* Board specific power pin control */
 	int				(*cam_power)(int onoff);
+#if defined(CONFIG_MACH_STEALTHV)||defined(CONFIG_MACH_AEGIS)
+       int                          cam_power_flag;
+#endif
+
 };
 
 /* For camera interface driver */

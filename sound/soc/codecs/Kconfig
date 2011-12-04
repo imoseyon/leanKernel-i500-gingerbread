@@ -256,15 +256,11 @@ config SND_SOC_WM8993
 	tristate
 
 config SND_SOC_WM8994
-	tristate 
-if SND_SOC_WM8994
-	config SND_SOC_WM8994_ATLAS
-	bool "Select codec for atlas"
-	depends on SND_SOC_WM8994
-	config SND_SOC_WM8994_VICTORY
-	bool "Select codec for victory"
-	depends on SND_SOC_WM8994
-endif
+	tristate
+
+config SND_SOC_A1026
+	tristate
+	default y if MACH_STEALTHV=y
 
 config SND_SOC_WM9081
 	tristate

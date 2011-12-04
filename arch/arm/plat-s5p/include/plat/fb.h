@@ -24,21 +24,7 @@
 
 struct platform_device;
 struct clk;
-#if defined (CONFIG_S5PV210_GARNETT_DELTA)
-#if defined(CONFIG_FB_S3C_MIPI_LCD)
-/* enumerates display mode. */
-enum {
-	SINGLE_LCD_MODE = 1,
-	DUAL_LCD_MODE = 2,
-};
 
-/* enumerates interface mode. */
-enum {
-	FIMD_RGB_INTERFACE = 1,
-	FIMD_CPU_INTERFACE = 2,
-};
-#endif
-#endif
 struct s3c_platform_fb {
 	int		hw_ver;
 	char		clk_name[16];
@@ -46,132 +32,17 @@ struct s3c_platform_fb {
 	int		nr_buffers[5];
 	int		default_win;
 	int		swap;
-        phys_addr_t     pmem_start; /* starting physical address of memory region */
-        size_t          pmem_size; /* size of memory region */
-#if defined(CONFIG_FB_S3C_MIPI_LCD)
-	void		*lcd_data;
-	unsigned int	sub_lcd_enabled;
-	unsigned int	machine_is_cypress;
-	unsigned int	machine_is_p1p2;
-	unsigned int	mdnie_is_enabled;
-	unsigned int	mipi_is_enabled;
-	unsigned int	interface_mode;
-
-	void		*single_lcd;
-	void		*dual_lcd;
-
-	void		(*set_display_path)(unsigned int mode);
-	void		(*cfg_gpio)(void);
-	int		(*backlight_on)(int onoff);
-	int		(*reset_lcd)(void);
-
-	/* variables and interface for mDNIe */
-	char		mdnie_clk_name[20];
-	void		*mdnie_clk;
-	unsigned int	mdnie_phy_base;
-	unsigned int	ielcd_phy_base;
-	void __iomem	*mdnie_mmio_base;
-	void __iomem	*ielcd_mmio_base;
-	unsigned char	mdnie_mode;
-
-	void		(*set_mdnie_clock)(void *mdnie_clk, unsigned char enable);
-	void		(*init_mdnie)(unsigned int mdnie_base,
-				unsigned int hsize, unsigned int vsize);
-	void		(*mdnie_set_mode)(unsigned int mdnie_base, unsigned char mode);
-
-	void		(*start_ielcd_logic)(unsigned int ielcd_base);
-	void		(*init_ielcd)(unsigned int ielcd_base, void *l, void *c);
-#else	
+	phys_addr_t	pmem_start; /* starting physical address of memory region */
+	size_t		pmem_size; /* size of memory region */
+	void            *lcd;
 	void		(*cfg_gpio)(struct platform_device *dev);
 	int		(*backlight_on)(struct platform_device *dev);
-	int		(*reset_lcd)(struct platform_device *dev);
-#endif
-	void            *lcd;
 	int		(*backlight_onoff)(struct platform_device *dev, int onoff);
+	int		(*reset_lcd)(struct platform_device *dev);
 	int		(*clk_on)(struct platform_device *pdev, struct clk **s3cfb_clk);
 	int		(*clk_off)(struct platform_device *pdev, struct clk **clk);
 };
-#if defined (CONFIG_S5PV210_GARNETT_DELTA)
-#if defined(CONFIG_FB_S3C_MIPI_LCD)
-/*
- * struct s3cfb_lcd_polarity
- * @rise_vclk:	if 1, video data is fetched at rising edge
- * @inv_hsync:	if HSYNC polarity is inversed
- * @inv_vsync:	if VSYNC polarity is inversed
- * @inv_vden:	if VDEN polarity is inversed
-*/
-struct s3cfb_lcd_polarity {
-	int	rise_vclk;
-	int	inv_hsync;
-	int	inv_vsync;
-	int	inv_vden;
-};
 
-/*
- * struct s3cfb_lcd_timing
- * @h_fp:	horizontal front porch
- * @h_bp:	horizontal back porch
- * @h_sw:	horizontal sync width
- * @v_fp:	vertical front porch
- * @v_fpe:	vertical front porch for even field
- * @v_bp:	vertical back porch
- * @v_bpe:	vertical back porch for even field
-*/
-struct s3cfb_lcd_timing {
-	int	h_fp;
-	int	h_bp;
-	int	h_sw;
-	int	v_fp;
-	int	v_fpe;
-	int	v_bp;
-	int	v_bpe;
-	int	v_sw;
-	int	cmd_allow_len;
-	void		(*cfg_gpio)(struct platform_device *dev);
-	int		(*backlight_on)(struct platform_device *dev);
-	int		(*reset_lcd)(struct platform_device *dev);
-};
-
-/* for CPU Interface */
-struct s3cfb_cpu_timing {
-	unsigned int	cs_setup;
-	unsigned int	wr_setup;
-	unsigned int	wr_act;
-	unsigned int	wr_hold;
-};
-
-/*
- * struct s3cfb_lcd
- * @name:		lcd panel name
- * @width:		horizontal resolution
- * @height:		vertical resolution
- * @width_mm:		width of picture in mm
- * @height_mm:		height of picture in mm
- * @bpp:		bits per pixel
- * @freq:		vframe frequency
- * @timing:		rgb timing values
- * @cpu_timing:		cpu timing values
- * @polarity:		polarity settings
- * @init_ldi:		pointer to LDI init function
- *
-*/
-struct s3cfb_lcd {
-	char	*name;
-	int	width;
-	int	height;
-	int	width_mm;
-	int	height_mm;
-	int	bpp;
-	int	freq;
-	struct	s3cfb_lcd_timing timing;
-	struct	s3cfb_lcd_polarity polarity;
-	struct	s3cfb_cpu_timing cpu_timing;
-
-	void	(*init_ldi)(void);
-	void	(*deinit_ldi)(void);
-};
-#endif
-#endif
 extern void s3cfb_set_platdata(struct s3c_platform_fb *fimd);
 
 /* defined by architecture to configure gpio */

@@ -20,9 +20,8 @@
 #include "core.h"
 #include "bus.h"
 #include "mmc_ops.h"
-#if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_FORTE)
+
 #define CONFIG_INAND_VERSION_PATCH
-#endif
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -126,12 +125,7 @@ static int mmc_decode_csd(struct mmc_card *card)
 	 * We also support eMMC v4.4 & v4.41.
 	 */
 	csd->structure = UNSTUFF_BITS(resp, 126, 2);
-	//if (csd->structure == 0) {
-#if defined(CONFIG_INAND_VERSION_PATCH)
-        if (csd->structure != 1 && csd->structure != 2 && csd->structure != 3) {
-#else
-        if (csd->structure != 1 && csd->structure != 2) {
-#endif
+	if (csd->structure == 0) {
 		printk(KERN_ERR "%s: unrecognised CSD structure version %d\n",
 			mmc_hostname(card->host), csd->structure);
 		return -EINVAL;
@@ -328,7 +322,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	int err;
 	u32 cid[4];
 #if defined(CONFIG_INAND_VERSION_PATCH)
-        u32 rocr[1];
+	u32 rocr[1];
 #endif
 	unsigned int max_dtr;
 
@@ -344,13 +338,11 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	mmc_go_idle(host);
 
 	/* The extra bit indicates that we support high capacity */
-	//err = mmc_send_op_cond(host, ocr | (1 << 30), NULL);
-#if defined(CONFIG_INAND_VERSION_PATCH)         
-        err = mmc_send_op_cond(host, ocr | (1 << 30), rocr);
+#if defined(CONFIG_INAND_VERSION_PATCH)		
+	err = mmc_send_op_cond(host, ocr | (1 << 30), rocr);
 #else
-        err = mmc_send_op_cond(host, ocr | (1 << 30), NULL);
+	err = mmc_send_op_cond(host, ocr | (1 << 30), NULL);
 #endif
-
 	if (err)
 		goto err;
 
@@ -379,6 +371,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			goto err;
 		}
 
+		oldcard->err_count = 0;
 		card = oldcard;
 	} else {
 		/*
@@ -439,11 +432,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		err = mmc_read_ext_csd(card);
 		if (err)
 			goto free_card;
-#if defined(CONFIG_INAND_VERSION_PATCH)         
-                if (rocr[0] & 0x40000000)
-                        mmc_card_set_blockaddr(card);
+#if defined(CONFIG_INAND_VERSION_PATCH)		
+		if (rocr[0] & 0x40000000)
+			mmc_card_set_blockaddr(card);
 #endif
-
 	}
 
 	/*
@@ -540,17 +532,20 @@ static void mmc_remove(struct mmc_host *host)
  */
 static void mmc_detect(struct mmc_host *host)
 {
-	int err;
+	int err = 0;
 
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
 	mmc_claim_host(host);
 
+	if (host->card->err_count >= ERR_TRIGGER_REINIT)
+		err = mmc_init_card(host, host->ocr, host->card);
 	/*
 	 * Just check if our card has been removed.
 	 */
-	err = mmc_send_status(host->card, NULL);
+	if (!err)
+		err = mmc_send_status(host->card, NULL);
 
 	mmc_release_host(host);
 

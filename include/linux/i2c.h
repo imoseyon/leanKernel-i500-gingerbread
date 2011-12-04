@@ -171,6 +171,7 @@ struct i2c_driver {
 
 	/* Device detection callback for automatic device creation */
 	int (*detect)(struct i2c_client *, struct i2c_board_info *);
+	const struct i2c_client_address_data *address_data;
 	const unsigned short *address_list;
 	struct list_head clients;
 };
@@ -350,7 +351,8 @@ struct i2c_adapter {
 	void *algo_data;
 
 	/* data fields that are valid for all devices	*/
-	struct rt_mutex bus_lock;
+	u8 level; 			/* nesting level for lockdep */
+	struct mutex bus_lock;
 
 	int timeout;			/* in jiffies */
 	int retries;
@@ -380,7 +382,7 @@ static inline void i2c_set_adapdata(struct i2c_adapter *dev, void *data)
  */
 static inline void i2c_lock_adapter(struct i2c_adapter *adapter)
 {
-	rt_mutex_lock(&adapter->bus_lock);
+	mutex_lock(&adapter->bus_lock);
 }
 
 /**
@@ -389,7 +391,7 @@ static inline void i2c_lock_adapter(struct i2c_adapter *adapter)
  */
 static inline void i2c_unlock_adapter(struct i2c_adapter *adapter)
 {
-	rt_mutex_unlock(&adapter->bus_lock);
+	mutex_unlock(&adapter->bus_lock);
 }
 
 /*flags for the client struct: */
@@ -404,6 +406,17 @@ static inline void i2c_unlock_adapter(struct i2c_adapter *adapter)
 #define I2C_CLASS_TV_DIGITAL	(1<<2)	/* dvb cards */
 #define I2C_CLASS_DDC		(1<<3)	/* DDC bus on graphics adapters */
 #define I2C_CLASS_SPD		(1<<7)	/* SPD EEPROMs and similar */
+
+/* i2c_client_address_data is the struct for holding default client
+ * addresses for a driver and for the parameters supplied on the
+ * command line
+ */
+struct i2c_client_address_data {
+	const unsigned short *normal_i2c;
+	const unsigned short *probe;
+	const unsigned short *ignore;
+	const unsigned short * const *forces;
+};
 
 /* Internal numbers to terminate lists */
 #define I2C_CLIENT_END		0xfffeU

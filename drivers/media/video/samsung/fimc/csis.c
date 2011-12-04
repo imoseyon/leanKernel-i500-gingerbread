@@ -215,6 +215,10 @@ void s3c_csis_start(int lanes, int settle, int align, int width,
 {
 	struct s3c_platform_csis *pdata;
 
+	if (s3c_csis->initialized)
+		return;
+
+
 	pdata = to_csis_plat(s3c_csis->dev);
 	if (pdata->cfg_phy_global)
 		pdata->cfg_phy_global(1);
@@ -239,20 +243,27 @@ void s3c_csis_start(int lanes, int settle, int align, int width,
 	s3c_csis_system_on();
 	s3c_csis_phy_on();
 
+	s3c_csis->initialized = 1;
+
 	info("Samsung MIPI-CSI2 operation started\n");
 }
 
-static void s3c_csis_stop(struct platform_device *pdev)
+void s3c_csis_stop()
 {
 	struct s3c_platform_csis *plat;
+
+	if (!s3c_csis->initialized)
+		return;
 
 	s3c_csis_disable_interrupt();
 	s3c_csis_system_off();
 	s3c_csis_phy_off();
 
-	plat = to_csis_plat(&pdev->dev);
+	plat = to_csis_plat(s3c_csis->dev);
 	if (plat->cfg_phy_global)
 		plat->cfg_phy_global(0);
+
+	s3c_csis->initialized = 0;
 }
 
 static irqreturn_t s3c_csis_irq(int irq, void *dev_id)
@@ -370,6 +381,8 @@ static int s3c_csis_probe(struct platform_device *pdev)
 	if (request_irq(s3c_csis->irq, s3c_csis_irq, IRQF_DISABLED, \
 		s3c_csis->name, s3c_csis))
 		err("request_irq failed\n");
+
+	s3c_csis->initialized = 0;
 
 	info("Samsung MIPI-CSI2 driver probed successfully\n");
 

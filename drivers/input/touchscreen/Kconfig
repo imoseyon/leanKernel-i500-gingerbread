@@ -11,27 +11,6 @@ menuconfig INPUT_TOUCHSCREEN
 
 if INPUT_TOUCHSCREEN
 
-config TOUCHSCREEN_QT602240
-        tristate "quantum touchscreen driver"
-        default N
-        help
-          Say Y here to enable the driver for the touchscreen on the
-          S3C spica board.
-
-          If unsure, say N.
-
-          To compile this driver as a module, choose M here: the
-          module will be called melfas_ts.
-
-config QT602240_TOUCHKEY
-        bool "quantum touchscreen touchkey support"
-        default N
-        depends on TOUCHSCREEN_QT602240
-        help
-          Say Y here to enable the touch key with help of  touchscreen driver.
-
-          If unsure, say N.
-
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
 	depends on MFD_88PM860X
@@ -641,5 +620,70 @@ config TOUCHSCREEN_TPS6507X
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called tps6507x_ts.
+
+config TOUCHSCREEN_QT602240
+        tristate "quantum touchscreen driver"
+        default N
+        help
+          Say Y here to enable the driver for the touchscreen on the
+          S3C spica board.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called melfas_ts.
+
+config TOUCHSCREEN_MELFAS_TS
+        tristate "melfas touchscreen driver"
+        default N
+        help
+          Say Y here to enable the driver for the touchscreen on the
+          S3C spica board.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called melfas_ts.
+
+config TOUCHSCREEN_MELFAS
+        tristate "Melfas touchscreen"
+        help
+        Chief Product
+
+config TOUCHSCREEN_AEGIS_TSP
+        tristate "AEGIS TSP temp"
+        default N
+        help
+          Say Y here to enable the driver for the touchscreen on the
+          S3C spica board.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called melfas_ts.
+
+config TOUCHSCREEN_VIPER_TSP
+        tristate "VIPER TSP temp"
+        default N
+        help
+          Say Y here to enable the driver for the touchscreen on the
+          S3C spica board.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called melfas_ts.
+
+config TOUCHSCREEN_CHIEF_TSP
+        tristate "CHIEF TSP temp"
+        default N
+        help
+          Say Y here to enable the driver for the touchscreen on the
+          S3C spica board.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called melfas_ts.
 
 endif

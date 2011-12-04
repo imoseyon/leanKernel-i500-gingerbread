@@ -16,11 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/mm.h>
 #include <linux/videodev2.h>
-#ifdef CONFIG_MACH_FORTE
-#include <linux/videodev2_samsung_forte.h>
-#else
 #include <linux/videodev2_samsung.h>
-#endif // CONFIG_MACH_FORTE
 #include <media/videobuf-core.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
@@ -1883,17 +1879,17 @@ static int fimc_qbuf_output_single_buf(struct fimc_control *ctrl,
 		return -EINVAL;
 	}
 
-	ret = fimc_outdev_start_camif(ctrl);
-	if (ret < 0) {
-		fimc_err("Fail: fimc_start_camif\n");
-		return -EINVAL;
-	}
-
 	ctrl->out->idxs.active.idx = idx;
 	ctrl->out->idxs.active.ctx = ctx->ctx_num;
 
 	ctrl->status = FIMC_STREAMON;
 	ctx->status = FIMC_STREAMON;
+
+	ret = fimc_outdev_start_camif(ctrl);
+	if (ret < 0) {
+		fimc_err("Fail: fimc_start_camif\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1912,17 +1908,17 @@ static int fimc_qbuf_output_multi_buf(struct fimc_control *ctrl,
 		return -EINVAL;
 	}
 
-	ret = fimc_outdev_start_camif(ctrl);
-	if (ret < 0) {
-		fimc_err("Fail: fimc_start_camif\n");
-		return -EINVAL;
-	}
-
 	ctrl->out->idxs.active.idx = idx;
 	ctrl->out->idxs.active.ctx = ctx->ctx_num;
 
 	ctrl->status = FIMC_STREAMON;
 	ctx->status = FIMC_STREAMON;
+
+	ret = fimc_outdev_start_camif(ctrl);
+	if (ret < 0) {
+		fimc_err("Fail: fimc_start_camif\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1981,17 +1977,17 @@ static int fimc_qbuf_output_dma_auto(struct fimc_control *ctrl,
 		for (i = 0; i < FIMC_PHYBUFS; i++)
 			fimc_hwset_output_address(ctrl, &buf_set, i);
 
-		ret = fimc_outdev_start_camif(ctrl);
-		if (ret < 0) {
-			fimc_err("Fail: fimc_start_camif\n");
-			return -EINVAL;
-		}
-
 		ctrl->out->idxs.active.idx = idx;
 		ctrl->out->idxs.active.ctx = ctx->ctx_num;
 
 		ctrl->status = FIMC_STREAMON;
 		ctx->status = FIMC_STREAMON;
+
+		ret = fimc_outdev_start_camif(ctrl);
+		if (ret < 0) {
+			fimc_err("Fail: fimc_start_camif\n");
+			return -EINVAL;
+		}
 
 		break;
 
@@ -2017,17 +2013,17 @@ static int fimc_qbuf_output_dma_manual(struct fimc_control *ctrl,
 	for (i = 0; i < FIMC_PHYBUFS; i++)
 		fimc_hwset_output_address(ctrl, &buf_set, i);
 
-	ret = fimc_outdev_start_camif(ctrl);
-	if (ret < 0) {
-		fimc_err("Fail: fimc_start_camif\n");
-		return -EINVAL;
-	}
-
 	ctrl->out->idxs.active.idx = idx;
 	ctrl->out->idxs.active.ctx = ctx->ctx_num;
 
 	ctrl->status = FIMC_STREAMON;
 	ctx->status = FIMC_STREAMON;
+
+	ret = fimc_outdev_start_camif(ctrl);
+	if (ret < 0) {
+		fimc_err("Fail: fimc_start_camif\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }

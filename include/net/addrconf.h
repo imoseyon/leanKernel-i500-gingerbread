@@ -57,6 +57,9 @@ extern void			addrconf_cleanup(void);
 
 extern int			addrconf_add_ifaddr(struct net *net,
 						    void __user *arg);
+
+extern int addrconf_add_ifid(struct net *net, void __user *arg);
+
 extern int			addrconf_del_ifaddr(struct net *net,
 						    void __user *arg);
 extern int			addrconf_set_dstaddr(struct net *net,

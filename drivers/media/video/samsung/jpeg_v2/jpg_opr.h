@@ -40,8 +40,6 @@ extern int			jpg_irq_reason;
 			"%s: " fmt, __func__, ##__VA_ARGS__);	\
 	} while (0)
 
-
-
 #ifdef CONFIG_VIDEO_JPEG_DEBUG
 #define jpg_dbg(fmt, ...)		JPG_DEBUG(fmt, ##__VA_ARGS__)
 #else

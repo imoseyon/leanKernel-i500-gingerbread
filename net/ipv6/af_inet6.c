@@ -507,6 +507,9 @@ int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 		return(ipv6_route_ioctl(net, cmd, (void __user *)arg));
 
+	case SIOCSIFID:
+		return (addrconf_add_ifid(net, (void __user *) arg));
+
 	case SIOCSIFADDR:
 		return addrconf_add_ifaddr(net, (void __user *) arg);
 	case SIOCDIFADDR:

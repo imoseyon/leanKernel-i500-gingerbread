@@ -991,7 +991,6 @@ static inline void mmc_bus_put(struct mmc_host *host)
 int mmc_resume_bus(struct mmc_host *host)
 {
 	unsigned long flags;
-	int err = 0;
 
 	if (!mmc_bus_needs_resume(host))
 		return -EINVAL;
@@ -1006,21 +1005,11 @@ int mmc_resume_bus(struct mmc_host *host)
 	if (host->bus_ops && !host->bus_dead) {
 		mmc_power_up(host);
 		BUG_ON(!host->bus_ops->resume);
-		err = host->bus_ops->resume(host);
+		host->bus_ops->resume(host);
 	}
 
-//#ifdef CONFIG_MACH_P1
-	if (!err) {
-//#endif
 	if (host->bus_ops->detect && !host->bus_dead)
 		host->bus_ops->detect(host);
-//#ifdef CONFIG_MACH_P1
-	} else {
-		printk(KERN_WARNING "%s: error %d during resume "
-	                                "(card was removed?)\n",
-	                                mmc_hostname(host), err);	
-	}
-//#endif
 
 	mmc_bus_put(host);
 	printk("%s: Deferred resume completed\n", mmc_hostname(host));
@@ -1179,11 +1168,8 @@ void mmc_rescan(struct work_struct *work)
 	 */
 	err = mmc_send_io_op_cond(host, 0, &ocr);
 	if (!err) {
-		if (mmc_attach_sdio(host, ocr)){
-        printk("mmc_attach_sdio err\n");
+		if (mmc_attach_sdio(host, ocr))
 			mmc_power_off(host);
-                }
-        printk("mmc_attach_sdio end\n");
 		extend_wakelock = 1;
 		goto out;
 	}
@@ -1214,14 +1200,10 @@ void mmc_rescan(struct work_struct *work)
 	mmc_power_off(host);
 
 out:
-#if 1//defined(CONFIG_MACH_P1)
-        wake_lock_timeout(&mmc_delayed_work_wake_lock, 3*HZ);
-#else
 	if (extend_wakelock)
 		wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ / 2);
 	else
 		wake_unlock(&mmc_delayed_work_wake_lock);
-#endif
 
 	if (host->caps & MMC_CAP_NEEDS_POLL)
 		mmc_schedule_delayed_work(&host->detect, HZ);
@@ -1365,7 +1347,6 @@ int mmc_suspend_host(struct mmc_host *host)
 	if (host->caps & MMC_CAP_DISABLE)
 		cancel_delayed_work(&host->disable);
 	cancel_delayed_work(&host->detect);
-	mmc_flush_scheduled_work();
 
 	mmc_bus_get(host);
 	if (host->bus_ops && !host->bus_dead) {
@@ -1465,8 +1446,8 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
-		if (!host->card || host->card->type != MMC_TYPE_SDIO) //skip mmc_detect_change for sdio
-		mmc_detect_change(host, 0);
+		if (!host->card || host->card->type != MMC_TYPE_SDIO)
+			mmc_detect_change(host, 0);
 
 	}
 
@@ -1496,7 +1477,7 @@ static int __init mmc_init(void)
 
 	wake_lock_init(&mmc_delayed_work_wake_lock, WAKE_LOCK_SUSPEND, "mmc_delayed_work");
 
-	workqueue = create_singlethread_workqueue("kmmcd");
+	workqueue = create_freezeable_workqueue("kmmcd");
 	if (!workqueue)
 		return -ENOMEM;
 

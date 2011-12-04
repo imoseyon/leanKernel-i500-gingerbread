@@ -17,8 +17,18 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-i2c-drv.h>
-#include <media/s5k4ecgx.h>
+#include <media/s5k4ecgx_platform.h>
 #include <linux/videodev2_samsung.h>
+
+
+#if 0/* For debug */
+#ifdef dev_dbg(dev, format, arg...)
+#undef dev_dbg(dev, format, arg...)
+#endif
+#define dev_dbg(dev, format, arg...)   dev_printk(KERN_DEBUG , dev , format , ## arg)
+#endif
+
+#define NEW_CAMERA /* For alternative method */
 
 #ifdef CONFIG_VIDEO_S5K4ECGX_V_1_0
 #include "s5k4ecgx_regs_1_0.h"
@@ -29,6 +39,7 @@
 #include "s5k4ecgx_regs_1_1.h"
 #define S5K4ECGX_VERSION_1_1	0x11
 #endif
+//#define CONFIG_LOAD_FILE	//For tunning binary
 
 #define FORMAT_FLAGS_COMPRESSED		0x3
 #define SENSOR_JPEG_SNAPSHOT_MEMSIZE	0x410580
@@ -36,12 +47,24 @@
 #define DEFAULT_PIX_FMT		V4L2_PIX_FMT_UYVY	/* YUV422 */
 #define DEFAULT_MCLK		24000000
 #define POLL_TIME_MS		10
-#define CAPTURE_POLL_TIME_MS    1000
+#define CAPTURE_POLL_TIME_MS    1500
 
+
+#ifdef NEW_CAMERA
+static int camcorder_check_flag;
+#endif
+
+#ifdef NEW_CAMERA
+/* maximum time for one frame at minimum fps (10fps) in normal mode */
+#define NORMAL_MODE_MAX_ONE_FRAME_DELAY_MS    100
+/* maximum time for one frame at minimum fps (4fps) in night mode */
+#define NIGHT_MODE_MAX_ONE_FRAME_DELAY_MS     250
+#else
 /* maximum time for one frame at minimum fps (15fps) in normal mode */
 #define NORMAL_MODE_MAX_ONE_FRAME_DELAY_MS     67
 /* maximum time for one frame at minimum fps (4fps) in night mode */
 #define NIGHT_MODE_MAX_ONE_FRAME_DELAY_MS     250
+#endif
 
 /* time to move lens to target position before last af mode register write */
 #define LENS_MOVE_TIME_MS       100
@@ -50,14 +73,14 @@
 #define LOW_LIGHT_LEVEL		0x1D
 
 /* level at or below which we need to use low light capture mode */
-#define HIGH_LIGHT_LEVEL	0x80
+#define HIGH_LIGHT_LEVEL	0x50//0x80
 
 #define FIRST_AF_SEARCH_COUNT   80
 #define SECOND_AF_SEARCH_COUNT  80
 #define AE_STABLE_SEARCH_COUNT  4
 
 #define FIRST_SETTING_FOCUS_MODE_DELAY_MS	100
-#define SECOND_SETTING_FOCUS_MODE_DELAY_MS	200
+#define SECOND_SETTING_FOCUS_MODE_DELAY_MS   	 200
 
 #ifdef CONFIG_VIDEO_S5K4ECGX_DEBUG
 enum {
@@ -100,14 +123,32 @@ enum s5k4ecgx_oprmode {
 
 enum s5k4ecgx_preview_frame_size {
 	S5K4ECGX_PREVIEW_QCIF = 0,	/* 176x144 */
+	S5K4ECGX_PREVIEW_QVGA,		/* 320x240 */
 	S5K4ECGX_PREVIEW_CIF,		/* 352x288 */
 	S5K4ECGX_PREVIEW_VGA,		/* 640x480 */
 	S5K4ECGX_PREVIEW_D1,		/* 720x480 */
 	S5K4ECGX_PREVIEW_WVGA,		/* 800x480 */
 	S5K4ECGX_PREVIEW_SVGA,		/* 800x600 */
 	S5K4ECGX_PREVIEW_WSVGA,		/* 1024x600*/
+	S5K4ECGX_PREVIEW_720P,		/* 1280x720*/
 	S5K4ECGX_PREVIEW_MAX,
 };
+
+#ifdef NEW_CAMERA
+enum s5k4ecgx_camcorder_preview_frame_size {
+	S5K4ECGX_CAMCORDER_PREVIEW_QCIF = 0,	/* 176x144 */
+	S5K4ECGX_CAMCORDER_PREVIEW_QVGA,		/* 320x240 */
+	S5K4ECGX_CAMCORDER_PREVIEW_CIF,		/* 352x288 */
+//	S5K4ECGX_CAMCORDER_PREVIEW_592,		/* 592x480 */			
+	S5K4ECGX_CAMCORDER_PREVIEW_VGA,		/* 640x480 */
+	S5K4ECGX_CAMCORDER_PREVIEW_D1,		/* 720x480 */
+	S5K4ECGX_CAMCORDER_PREVIEW_WVGA,		/* 800x480 */
+	S5K4ECGX_CAMCORDER_PREVIEW_SVGA,		/* 800x600 */
+	S5K4ECGX_CAMCORDER_PREVIEW_WSVGA,		/* 1024x600*/
+	S5K4ECGX_CAMCORDER_PREVIEW_720P,		/* 1280x720*/
+	S5K4ECGX_CAMCORDER_PREVIEW_MAX,
+};
+#endif
 
 enum s5k4ecgx_capture_frame_size {
 	S5K4ECGX_CAPTURE_VGA = 0,	/* 640x480 */
@@ -133,16 +174,39 @@ struct s5k4ecgx_framesize {
 
 static const struct s5k4ecgx_framesize s5k4ecgx_preview_framesize_list[] = {
 	{ S5K4ECGX_PREVIEW_QCIF,	176,  144 },
+	{ S5K4ECGX_PREVIEW_QVGA,	320,  240 },
 	{ S5K4ECGX_PREVIEW_CIF,		352,  288 },
 	{ S5K4ECGX_PREVIEW_VGA,		640,  480 },
 	{ S5K4ECGX_PREVIEW_D1,		720,  480 },
+	{ S5K4ECGX_PREVIEW_WVGA,	800,  480 },
+	{ S5K4ECGX_PREVIEW_720P,	1280, 720 },
 };
+
+#ifdef NEW_CAMERA
+static const struct s5k4ecgx_framesize s5k4ecgx_camcorder_preview_framesize_list[] = {
+	{ S5K4ECGX_CAMCORDER_PREVIEW_QCIF,	176,  144 },
+	{ S5K4ECGX_CAMCORDER_PREVIEW_QVGA,	320,  240 },
+	{ S5K4ECGX_CAMCORDER_PREVIEW_CIF,	352,  288 },
+//	{ S5K4ECGX_CAMCORDER_PREVIEW_592,	592,  480 },		
+	{ S5K4ECGX_CAMCORDER_PREVIEW_VGA,	640,  480 },
+	{ S5K4ECGX_CAMCORDER_PREVIEW_D1,	720,  480 },
+	{ S5K4ECGX_CAMCORDER_PREVIEW_WVGA,	800,  480 },
+	{ S5K4ECGX_CAMCORDER_PREVIEW_720P,	1280, 720 },
+
+	};
+#endif
 
 static const struct s5k4ecgx_framesize s5k4ecgx_capture_framesize_list[] = {
 	{ S5K4ECGX_CAPTURE_VGA,		640,  480 },
+	{ S5K4ECGX_CAPTURE_WVGA,	800,  480 },
+	{ S5K4ECGX_CAPTURE_SVGA,	800,  600 },
+	{ S5K4ECGX_CAPTURE_WSVGA,	1024, 600 },
 	{ S5K4ECGX_CAPTURE_1MP,		1280, 960 },
+	{ S5K4ECGX_CAPTURE_W1MP,	1600, 960 },
 	{ S5K4ECGX_CAPTURE_2MP,		1600, 1200 },
+	{ S5K4ECGX_CAPTURE_W2MP,	2048, 1232 },
 	{ S5K4ECGX_CAPTURE_3MP,		2048, 1536 },
+	{ S5K4ECGX_CAPTURE_W4MP,	2560, 1536 },
 	{ S5K4ECGX_CAPTURE_5MP,		2560, 1920 },
 };
 
@@ -162,6 +226,7 @@ enum s5k4ecgx_runmode {
 	S5K4ECGX_RUNMODE_IDLE,
 	S5K4ECGX_RUNMODE_RUNNING,
 	S5K4ECGX_RUNMODE_CAPTURE,
+	S5K4ECGX_RUNMODE_ERROR,
 };
 
 struct s5k4ecgx_firmware {
@@ -202,6 +267,27 @@ struct s5k4ecgx_regset {
 	u8 *data;
 };
 
+#ifdef CONFIG_LOAD_FILE
+struct s5k4ecgx_regset_table {
+	const u32	*reg;
+	int		array_size;
+	char		*name;
+};
+
+#define S5K4ECGX_REGSET(x, y)		\
+	[(x)] = {					\
+		.reg		= (y),			\
+		.array_size	= ARRAY_SIZE((y)),	\
+		.name		= #y,			\
+}
+
+#define S5K4ECGX_REGSET_TABLE(y)		\
+	{					\
+		.reg		= (y),			\
+		.array_size	= ARRAY_SIZE((y)),	\
+		.name		= #y,			\
+}
+#else
 struct s5k4ecgx_regset_table {
 	const u32	*reg;
 	int		array_size;
@@ -218,6 +304,7 @@ struct s5k4ecgx_regset_table {
 		.reg		= (y),			\
 		.array_size	= ARRAY_SIZE((y)),	\
 }
+#endif
 
 struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table ev[EV_MAX];
@@ -226,6 +313,9 @@ struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table effect[IMAGE_EFFECT_MAX];
 	struct s5k4ecgx_regset_table white_balance[WHITE_BALANCE_MAX];
 	struct s5k4ecgx_regset_table preview_size[S5K4ECGX_PREVIEW_MAX];
+#ifdef NEW_CAMERA
+	struct s5k4ecgx_regset_table camcorder_preview_size[S5K4ECGX_CAMCORDER_PREVIEW_MAX];
+#endif
 	struct s5k4ecgx_regset_table capture_size[S5K4ECGX_CAPTURE_MAX];
 	struct s5k4ecgx_regset_table scene_mode[SCENE_MODE_MAX];
 	struct s5k4ecgx_regset_table saturation[SATURATION_MAX];
@@ -233,6 +323,8 @@ struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table sharpness[SHARPNESS_MAX];
 	struct s5k4ecgx_regset_table fps[FRAME_RATE_MAX];
 	struct s5k4ecgx_regset_table preview_return;
+	struct s5k4ecgx_regset_table night_preview_return;
+	struct s5k4ecgx_regset_table beach_fireworks_preview_return;
 	struct s5k4ecgx_regset_table jpeg_quality_high;
 	struct s5k4ecgx_regset_table jpeg_quality_normal;
 	struct s5k4ecgx_regset_table jpeg_quality_low;
@@ -242,10 +334,19 @@ struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table af_assist_flash_end;
 	struct s5k4ecgx_regset_table af_low_light_mode_on;
 	struct s5k4ecgx_regset_table af_low_light_mode_off;
+#ifndef NEW_CAMERA
 	struct s5k4ecgx_regset_table ae_awb_lock_on;
 	struct s5k4ecgx_regset_table ae_awb_lock_off;
+#else
+	struct s5k4ecgx_regset_table ae_lock;
+	struct s5k4ecgx_regset_table ae_unlock;
+	struct s5k4ecgx_regset_table awb_lock;
+	struct s5k4ecgx_regset_table awb_unlock;
+#endif
 	struct s5k4ecgx_regset_table low_cap_on;
 	struct s5k4ecgx_regset_table low_cap_off;
+	struct s5k4ecgx_regset_table night_cap;
+	struct s5k4ecgx_regset_table beach_snow_fire_cap;
 	struct s5k4ecgx_regset_table wdr_on;
 	struct s5k4ecgx_regset_table wdr_off;
 	struct s5k4ecgx_regset_table face_detection_on;
@@ -254,9 +355,18 @@ struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table af_macro_mode_1;
 	struct s5k4ecgx_regset_table af_macro_mode_2;
 	struct s5k4ecgx_regset_table af_macro_mode_3;
+	struct s5k4ecgx_regset_table af_low_light_macro_1;
+	struct s5k4ecgx_regset_table af_low_light_macro_2;
+	struct s5k4ecgx_regset_table af_low_light_macro_3;
 	struct s5k4ecgx_regset_table af_normal_mode_1;
 	struct s5k4ecgx_regset_table af_normal_mode_2;
 	struct s5k4ecgx_regset_table af_normal_mode_3;
+#ifdef NEW_CAMERA
+	struct s5k4ecgx_regset_table af_normal_mode_4;
+#endif
+	struct s5k4ecgx_regset_table af_low_light_normal_1;
+	struct s5k4ecgx_regset_table af_low_light_normal_2;
+	struct s5k4ecgx_regset_table af_low_light_normal_3;
 	struct s5k4ecgx_regset_table af_return_infinite_position;
 	struct s5k4ecgx_regset_table af_return_macro_position;
 	struct s5k4ecgx_regset_table single_af_start;
@@ -266,6 +376,11 @@ struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table dtp_stop;
 	struct s5k4ecgx_regset_table init_reg_1;
 	struct s5k4ecgx_regset_table init_reg_2;
+#ifdef NEW_CAMERA
+	struct s5k4ecgx_regset_table init_reg_1_qik;
+	struct s5k4ecgx_regset_table init_reg_2_qik;
+	struct s5k4ecgx_regset_table s5k4ecgx_640_preview_qik;
+#endif
 	struct s5k4ecgx_regset_table flash_init;
 	struct s5k4ecgx_regset_table reset_crop;
 	struct s5k4ecgx_regset_table get_ae_stable_status;
@@ -276,6 +391,9 @@ struct s5k4ecgx_regs {
 	struct s5k4ecgx_regset_table get_esd_status;
 	struct s5k4ecgx_regset_table get_iso;
 	struct s5k4ecgx_regset_table get_shutterspeed;
+	struct s5k4ecgx_regset_table set_fix_fps;
+	struct s5k4ecgx_regset_table set_15_fps;
+	struct s5k4ecgx_regset_table set_auto_fps;    
 };
 
 #ifdef CONFIG_VIDEO_S5K4ECGX_V_1_0
@@ -418,9 +536,21 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_0 = {
 	.af_macro_mode_1 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Macro_mode_1_v1),
 	.af_macro_mode_2 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Macro_mode_2_v1),
 	.af_macro_mode_3 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Macro_mode_3_v1),
+	.af_low_light_macro_1 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Macro_mode_1_v1),
+	.af_low_light_macro_2 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Macro_mode_2_v1),
+	.af_low_light_macro_3 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Macro_mode_3_v1),
 	.af_normal_mode_1 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_1_v1),
 	.af_normal_mode_2 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_2_v1),
 	.af_normal_mode_3 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_3_v1),
+	.af_low_light_normal_1 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_normal_mode_1_v1),
+	.af_low_light_normal_2 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_normal_mode_2_v1),
+	.af_low_light_normal_3 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_normal_mode_3_v1),
 	.af_return_infinite_position =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Return_Inf_pos_v1),
 	.af_return_macro_position =
@@ -433,7 +563,7 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_0 = {
 	.init_reg_1 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_init_reg1_v1),
 	.init_reg_2 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_init_reg2_v1),
 	.flash_init = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Flash_init_v1),
-	.reset_crop = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Reset_Crop_v1),
+//	.reset_crop = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Reset_Crop_v1),
 	.get_ae_stable_status =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_Get_AE_Stable_Status_v1),
 	.get_light_level = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Get_Light_Level_v1),
@@ -447,6 +577,13 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_0 = {
 	.get_iso = S5K4ECGX_REGSET_TABLE(s5k4ecgx_get_iso_reg_v1),
 	.get_shutterspeed =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_get_shutterspeed_reg_v1),
+#if 0
+	.night_capture = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Night_Capture_v1),
+	.return_night_preview =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_return_night_preview_v1),
+	.beach_snow_fire_capture =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_Beach_Snow_Fire_Capture_v1),
+#endif
 };
 #endif
 
@@ -497,21 +634,42 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 	},
 	.preview_size = {
 		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_QCIF, s5k4ecgx_176_Preview),
+		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_QVGA, s5k4ecgx_320_Preview), 
 		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_CIF, s5k4ecgx_352_Preview),
 		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_VGA, s5k4ecgx_640_Preview),
 		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_D1, s5k4ecgx_720_Preview),
+		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_WVGA, s5k4ecgx_800_Preview),
+		S5K4ECGX_REGSET(S5K4ECGX_PREVIEW_720P, s5k4ecgx_1280_Preview),
+
 	},
+#ifdef NEW_CAMERA
+	.camcorder_preview_size = {
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_QCIF, s5k4ecgx_176_Camcorder),
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_QVGA, s5k4ecgx_320_Camcorder), 
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_CIF, s5k4ecgx_352_Camcorder),
+//		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_592, s5k4ecgx_592_Camcorder),
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_VGA, s5k4ecgx_640_Camcorder),
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_D1, s5k4ecgx_720_Camcorder),
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_WVGA, s5k4ecgx_800_Camcorder),
+		S5K4ECGX_REGSET(S5K4ECGX_CAMCORDER_PREVIEW_720P, s5k4ecgx_1280_Camcorder),
+	},
+#endif
 	.capture_size = {
 		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_VGA, s5k4ecgx_VGA_Capture),
+		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_WVGA, s5k4ecgx_800_Capture), 
 		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_1MP, s5k4ecgx_1M_Capture),
+		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_W1MP, s5k4ecgx_1600_Capture),
 		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_2MP, s5k4ecgx_2M_Capture),
+		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_W2MP, s5k4ecgx_2048_Capture),
 		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_3MP, s5k4ecgx_3M_Capture),
+		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_W4MP, s5k4ecgx_2560_Capture),
 		S5K4ECGX_REGSET(S5K4ECGX_CAPTURE_5MP, s5k4ecgx_5M_Capture),
 	},
 	.scene_mode = {
 		S5K4ECGX_REGSET(SCENE_MODE_NONE, s5k4ecgx_Scene_Default),
 		S5K4ECGX_REGSET(SCENE_MODE_PORTRAIT, s5k4ecgx_Scene_Portrait),
 		S5K4ECGX_REGSET(SCENE_MODE_NIGHTSHOT, s5k4ecgx_Scene_Nightshot),
+		S5K4ECGX_REGSET(SCENE_MODE_BACK_LIGHT, s5k4ecgx_Scene_Backlight),
 		S5K4ECGX_REGSET(SCENE_MODE_LANDSCAPE, s5k4ecgx_Scene_Landscape),
 		S5K4ECGX_REGSET(SCENE_MODE_SPORTS, s5k4ecgx_Scene_Sports),
 		S5K4ECGX_REGSET(SCENE_MODE_PARTY_INDOOR,
@@ -519,6 +677,9 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 		S5K4ECGX_REGSET(SCENE_MODE_BEACH_SNOW,
 				s5k4ecgx_Scene_Beach_Snow),
 		S5K4ECGX_REGSET(SCENE_MODE_SUNSET, s5k4ecgx_Scene_Sunset),
+		S5K4ECGX_REGSET(SCENE_MODE_DUSK_DAWN, s5k4ecgx_Scene_Duskdawn),
+		S5K4ECGX_REGSET(SCENE_MODE_FALL_COLOR, s5k4ecgx_Scene_Fall_Color),
+		S5K4ECGX_REGSET(SCENE_MODE_TEXT, s5k4ecgx_Scene_Text),
 		S5K4ECGX_REGSET(SCENE_MODE_FIREWORKS, s5k4ecgx_Scene_Fireworks),
 		S5K4ECGX_REGSET(SCENE_MODE_CANDLE_LIGHT,
 				s5k4ecgx_Scene_Candle_Light),
@@ -547,13 +708,9 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 		S5K4ECGX_REGSET(SHARPNESS_PLUS_1, s5k4ecgx_Sharpness_Plus_1),
 		S5K4ECGX_REGSET(SHARPNESS_PLUS_2, s5k4ecgx_Sharpness_Plus_2),
 	},
-	.fps = {
-		S5K4ECGX_REGSET(FRAME_RATE_AUTO, s5k4ecgx_FPS_Auto),
-		S5K4ECGX_REGSET(FRAME_RATE_7, s5k4ecgx_FPS_7),
-		S5K4ECGX_REGSET(FRAME_RATE_15, s5k4ecgx_FPS_15),
-		S5K4ECGX_REGSET(FRAME_RATE_30, s5k4ecgx_FPS_30),
-	},
 	.preview_return = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Preview_Return),
+	.night_preview_return = S5K4ECGX_REGSET_TABLE(s5k4ecgx_return_night_preview),
+	.beach_fireworks_preview_return = S5K4ECGX_REGSET_TABLE(s5k4ecgx_return_beach_Fireworks_preview),
 	.jpeg_quality_high = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Jpeg_Quality_High),
 	.jpeg_quality_normal =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_Jpeg_Quality_Normal),
@@ -568,12 +725,21 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Mode_On),
 	.af_low_light_mode_off =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Mode_Off),
+#ifndef NEW_CAMERA
 	.ae_awb_lock_on =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AE_AWB_Lock_On),
 	.ae_awb_lock_off =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AE_AWB_Lock_Off),
+#else
+	.ae_lock = S5K4ECGX_REGSET_TABLE(s5k4ecgx_ae_lock),
+	.ae_unlock = S5K4ECGX_REGSET_TABLE(s5k4ecgx_ae_unlock),
+	.awb_lock = S5K4ECGX_REGSET_TABLE(s5k4ecgx_awb_lock),
+	.awb_unlock = S5K4ECGX_REGSET_TABLE(s5k4ecgx_awb_unlock),
+#endif
 	.low_cap_on = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Low_Cap_On),
 	.low_cap_off = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Low_Cap_Off),
+	.night_cap = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Night_Capture),
+	.beach_snow_fire_cap = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Beach_Snow_Fire_Capture),
 	.wdr_on = S5K4ECGX_REGSET_TABLE(s5k4ecgx_WDR_on),
 	.wdr_off = S5K4ECGX_REGSET_TABLE(s5k4ecgx_WDR_off),
 	.face_detection_on = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Face_Detection_On),
@@ -583,9 +749,24 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 	.af_macro_mode_1 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Macro_mode_1),
 	.af_macro_mode_2 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Macro_mode_2),
 	.af_macro_mode_3 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Macro_mode_3),
+	.af_low_light_macro_1 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Macro_mode_1),
+	.af_low_light_macro_2 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Macro_mode_2),
+	.af_low_light_macro_3 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_Macro_mode_3),
 	.af_normal_mode_1 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_1),
 	.af_normal_mode_2 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_2),
 	.af_normal_mode_3 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_3),
+#ifdef NEW_CAMERA
+	.af_normal_mode_4 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Normal_mode_4),
+#endif
+	.af_low_light_normal_1 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_normal_mode_1),
+	.af_low_light_normal_2 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_normal_mode_2),
+	.af_low_light_normal_3 =
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Low_Light_normal_mode_3),
 	.af_return_infinite_position =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_AF_Return_Inf_pos),
 	.af_return_macro_position =
@@ -597,8 +778,12 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 	.dtp_stop = S5K4ECGX_REGSET_TABLE(s5k4ecgx_DTP_stop),
 	.init_reg_1 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_init_reg1),
 	.init_reg_2 = S5K4ECGX_REGSET_TABLE(s5k4ecgx_init_reg2),
+#ifdef NEW_CAMERA /* For Qik */
+	.init_reg_1_qik = S5K4ECGX_REGSET_TABLE(s5k4ecgx_init_reg1_Qik),
+	.init_reg_2_qik = S5K4ECGX_REGSET_TABLE(s5k4ecgx_init_reg2_Qik),
+	.s5k4ecgx_640_preview_qik = S5K4ECGX_REGSET_TABLE(s5k4ecgx_640_Preview_Qik),
+#endif
 	.flash_init = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Flash_init),
-	.reset_crop = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Reset_Crop),
 	.get_ae_stable_status =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_Get_AE_Stable_Status),
 	.get_light_level = S5K4ECGX_REGSET_TABLE(s5k4ecgx_Get_Light_Level),
@@ -612,6 +797,12 @@ static const struct s5k4ecgx_regs regs_for_fw_version_1_1 = {
 	.get_iso = S5K4ECGX_REGSET_TABLE(s5k4ecgx_get_iso_reg),
 	.get_shutterspeed =
 		S5K4ECGX_REGSET_TABLE(s5k4ecgx_get_shutterspeed_reg),
+	.set_fix_fps = 
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_FPS_30),		
+	.set_15_fps = 
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_FPS_15),		
+	.set_auto_fps = 
+		S5K4ECGX_REGSET_TABLE(s5k4ecgx_FPS_Auto),		
 };
 #endif
 
@@ -632,8 +823,7 @@ struct s5k4ecgx_state {
 	enum s5k4ecgx_runmode runmode;
 	enum s5k4ecgx_oprmode oprmode;
 	enum af_operation_status af_status;
-	int preview_framesize_index;
-	int capture_framesize_index;
+	int framesize_index;
 	int sensor_version;
 	int freq;		/* MCLK in Hz */
 	int check_dataline;
@@ -641,9 +831,9 @@ struct s5k4ecgx_state {
 	bool flash_on;
 	bool sensor_af_in_low_light_mode;
 	bool flash_state_on_previous_capture;
-	bool initialized;
-	bool restore_preview_size_needed;
+	bool touch_ae_af_state; /* 0: never 1: ever */
 	int one_frame_delay_ms;
+	int vt_mode; /* vt mode, 1:Qik */
 	const struct s5k4ecgx_regs *regs;
 };
 
@@ -732,6 +922,140 @@ static int s5k4ecgx_i2c_write_twobyte(struct i2c_client *client,
 	return 0;
 }
 
+#ifdef CONFIG_LOAD_FILE
+#include <linux/vmalloc.h>
+#include <linux/fs.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+/*#include <asm/uaccess.h>*/
+
+static char *s5k4ecgx_regs_table;
+
+static int s5k4ecgx_regs_table_size;
+
+int s5k4ecgx_regs_table_init(int rev)
+{
+	struct file *filp;
+	char *dp;
+	long l;
+	loff_t pos;
+	int ret;
+	mm_segment_t fs = get_fs();
+
+	set_fs(get_ds());
+#if 1
+	if (rev)
+#ifdef NEW_CAMERA
+		filp = filp_open("/sdcard/external_sd/s5k4ecgx_regs_1_1.h", O_RDONLY, 0);
+#endif
+	else
+		filp = filp_open("/sdcard/external_sd/s5k4ecgx_regs_1_0.h", O_RDONLY, 0);
+#else
+	filp = filp_open("/mnt/internal_sd/external_sd/s5k4ecgx.h",
+			O_RDONLY, 0);
+#endif
+
+	if (IS_ERR_OR_NULL(filp)) {
+		printk(KERN_DEBUG "file open error\n");
+		return PTR_ERR(filp);
+	}
+
+	l = filp->f_path.dentry->d_inode->i_size;
+	printk(KERN_DEBUG "l = %ld\n", l);
+	//dp = kmalloc(l, GFP_KERNEL);
+	dp = vmalloc(l);
+	if (dp == NULL) {
+		printk(KERN_DEBUG "Out of Memory\n");
+		filp_close(filp, current->files);
+	}
+
+	pos = 0;
+	memset(dp, 0, l);
+	ret = vfs_read(filp, (char __user *)dp, l, &pos);
+
+	if (ret != l) {
+		printk(KERN_DEBUG "Failed to read file ret = %d\n", ret);
+		/*kfree(dp);*/
+		vfree(dp);
+		filp_close(filp, current->files);
+		return -EINVAL;
+	}
+
+	filp_close(filp, current->files);
+
+	set_fs(fs);
+
+	s5k4ecgx_regs_table = dp;
+
+	s5k4ecgx_regs_table_size = l;
+
+	*((s5k4ecgx_regs_table + s5k4ecgx_regs_table_size) - 1) = '\0';
+
+	printk(KERN_DEBUG "s5k4ecgx_regs_table 0x%p, %ld\n", dp, l);
+
+	return 0;
+}
+
+void s5k4ecgx_regs_table_exit(void)
+{
+	if (s5k4ecgx_regs_table) {
+		s5k4ecgx_regs_table = NULL;
+		kfree(s5k4ecgx_regs_table);
+	}
+}
+
+static int s5k4ecgx_regs_table_write(struct i2c_client *client, char *name)
+{
+	char *start, *end, *reg;
+	unsigned int value;
+	char reg_buf[11];
+
+	*(reg_buf + 10) = '\0';
+
+	start = strstr(s5k4ecgx_regs_table, name);
+	end = strstr(start, "};");
+
+	while (1) {
+		/* Find Address */
+		reg = strstr(start, "0x");
+		if (reg)
+			start = strstr(reg, "\n");
+
+		if ((reg == NULL) || (reg > end))
+			break;
+		/* Write Value to Address */
+		if (reg != NULL)  {
+			memcpy(reg_buf, (reg), 10);
+			value =
+				(unsigned int)simple_strtoul(reg_buf,
+						NULL, 16);
+
+			/*	printk("==== value 0x%08x=======\n", value); */
+
+			s5k4ecgx_i2c_write_twobyte(client,
+					((value >> 16) & 0xFFFF), (value & 0xFFFF));
+		}
+	}
+
+	return 0;
+}
+
+static int s5k4ecgx_write_regs(struct v4l2_subdev *sd, const u32 regs[],
+			     int size, char *name)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	int err;
+
+	err = s5k4ecgx_regs_table_write(client, name);
+	if (unlikely(err < 0)) {
+		v4l_info(client,
+				"%s: s5k4ecgx_regs_table_write failed\n", __func__);
+		return err;
+	}
+	return 0;
+}
+#else
 static int s5k4ecgx_write_regs(struct v4l2_subdev *sd, const u32 regs[],
 			     int size)
 {
@@ -739,6 +1063,7 @@ static int s5k4ecgx_write_regs(struct v4l2_subdev *sd, const u32 regs[],
 	int i, err;
 
 	for (i = 0; i < size; i++) {
+		//printk("==== value 0x%08x=======\n", regs[i]); 
 		err = s5k4ecgx_i2c_write_twobyte(client,
 			(regs[i] >> 16), regs[i]);
 		if (unlikely(err != 0)) {
@@ -750,6 +1075,7 @@ static int s5k4ecgx_write_regs(struct v4l2_subdev *sd, const u32 regs[],
 
 	return 0;
 }
+#endif
 
 static int s5k4ecgx_set_from_table(struct v4l2_subdev *sd,
 				const char *setting_name,
@@ -768,7 +1094,11 @@ static int s5k4ecgx_set_from_table(struct v4l2_subdev *sd,
 	table += index;
 	if (table->reg == NULL)
 		return -EINVAL;
+#ifdef CONFIG_LOAD_FILE
+	return s5k4ecgx_write_regs(sd, table->reg, table->array_size, table->name);
+#else
 	return s5k4ecgx_write_regs(sd, table->reg, table->array_size);
+#endif
 }
 
 static int s5k4ecgx_set_parameter(struct v4l2_subdev *sd,
@@ -790,6 +1120,93 @@ static int s5k4ecgx_set_parameter(struct v4l2_subdev *sd,
 		*current_value_ptr = new_value;
 	return err;
 }
+#ifdef NEW_CAMERA
+static void s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(struct v4l2_subdev *sd, int bit, int set)
+{
+
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct s5k4ecgx_state *state = container_of(sd, struct s5k4ecgx_state, sd);
+	struct sec_cam_parm *parms =
+		(struct sec_cam_parm *)&state->strm.parm.raw_data;
+	int REG_TC_DBG_AutoAlgEnBits = 0;
+
+	/* Read 04E6 */
+	s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
+	s5k4ecgx_i2c_write_twobyte(client, 0x002E, 0x04E6);
+	s5k4ecgx_i2c_read_twobyte(client, 0x0F12, (unsigned short*)&REG_TC_DBG_AutoAlgEnBits);
+	
+	if(bit == 3 && set == true)
+	{
+		if(REG_TC_DBG_AutoAlgEnBits & 0x8 == 1)return;
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)mdelay(250);
+		else mdelay(100);
+		REG_TC_DBG_AutoAlgEnBits = REG_TC_DBG_AutoAlgEnBits | 0x8;
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x04E6);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, REG_TC_DBG_AutoAlgEnBits);
+	}
+	else if(bit == 3 && set == false)
+	{
+		if(REG_TC_DBG_AutoAlgEnBits & 0x8 == 0)return;
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)mdelay(250);
+		else mdelay(100);
+		REG_TC_DBG_AutoAlgEnBits = REG_TC_DBG_AutoAlgEnBits & 0xFFF7;
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x04E6);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, REG_TC_DBG_AutoAlgEnBits);
+	}
+	else if(bit == 5 && set == true)
+	{
+		if(REG_TC_DBG_AutoAlgEnBits & 0x20 == 1)return;
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)mdelay(250);
+		else mdelay(100);
+		REG_TC_DBG_AutoAlgEnBits = REG_TC_DBG_AutoAlgEnBits | 0x20;
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x04E6);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, REG_TC_DBG_AutoAlgEnBits);
+	}
+	else if(bit == 5 && set == false)
+	{
+		if(REG_TC_DBG_AutoAlgEnBits & 0x20 == 0)return;
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)mdelay(250);
+		else mdelay(100);
+		REG_TC_DBG_AutoAlgEnBits = REG_TC_DBG_AutoAlgEnBits & 0xFFDF;
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x04E6);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, REG_TC_DBG_AutoAlgEnBits);
+	}
+
+#if 0
+	/* restore write mode */
+	s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+#endif
+
+	return;
+}
+
+static void s5k4ecgx_check_REG_TC_GP_EnablePreviewChanged(struct v4l2_subdev *sd) /* Check the preview frame */
+{
+	int cnt = 0;
+	int REG_TC_GP_EnablePreviewChanged = 0;
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+//	printk("[S5K4ECGX]s5k4ecgx_check_REG_TC_GP_EnablePreviewChanged\n");
+	while(cnt < 100) /* Max duration : 1000msec */
+	{
+		s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002E, 0x0244);
+		s5k4ecgx_i2c_read_twobyte(client, 0x0F12, (unsigned short*)&REG_TC_GP_EnablePreviewChanged);
+		if(!REG_TC_GP_EnablePreviewChanged)break;
+		mdelay(10);
+		cnt++;
+	}
+	if(cnt){
+	//	printk("[S5K4ECGX] wait time for preview frame : %dms\n",cnt*10);
+	}
+	if(REG_TC_GP_EnablePreviewChanged)printk("[S5K4ECGX] start preview failed.\n");
+}
+
+
+#endif
 
 static int s5k4ecgx_set_preview_stop(struct v4l2_subdev *sd)
 {
@@ -800,7 +1217,8 @@ static int s5k4ecgx_set_preview_stop(struct v4l2_subdev *sd)
 	if (state->runmode == S5K4ECGX_RUNMODE_RUNNING)
 		state->runmode = S5K4ECGX_RUNMODE_IDLE;
 
-	dev_dbg(&client->dev, "%s:\n", __func__);
+	dev_dbg(&client->dev, "%s: =====change preview mode=====\n",
+		__func__);
 
 	return 0;
 }
@@ -811,34 +1229,104 @@ static int s5k4ecgx_set_preview_start(struct v4l2_subdev *sd)
 	struct s5k4ecgx_state *state =
 		container_of(sd, struct s5k4ecgx_state, sd);
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct sec_cam_parm *parms =
+		(struct sec_cam_parm *)&state->strm.parm.raw_data;
 	bool set_size = true;
 
 	dev_dbg(&client->dev, "%s: runmode = %d\n",
 		__func__, state->runmode);
 
+#if 1
+	if(state->runmode == S5K4ECGX_RUNMODE_ERROR)
+	{
+		state->runmode = S5K4ECGX_RUNMODE_NOTREADY;
+		return -ENODEV; /* No device or not ready */
+
+	}
+#endif
+
 	if (!state->pix.width || !state->pix.height ||
 		!state->strm.parm.capture.timeperframe.denominator)
 		return -EINVAL;
 
+	if (state->check_dataline) {
+		if (s5k4ecgx_set_from_table(sd, "dtp start",
+					&state->regs->dtp_start, 1, 0) < 0)
+			return -EIO;
+	}
+
 	if (state->runmode == S5K4ECGX_RUNMODE_CAPTURE) {
+
+		state->touch_ae_af_state = 0; /* Initialization touch AF & AE */
+
 		dev_dbg(&client->dev, "%s: sending Preview_Return cmd\n",
 			__func__);
+
 		err = s5k4ecgx_set_from_table(sd, "preview return",
 					&state->regs->preview_return, 1, 0);
+
 		if (err < 0) {
 			dev_err(&client->dev,
 				"%s: failed: s5k4ecgx_Preview_Return\n",
 				__func__);
 			return -EIO;
 		}
-		set_size = state->restore_preview_size_needed;
-	}
+	
+#ifndef	NEW_CAMERA
+		if (parms->scene_mode == SCENE_MODE_NIGHTSHOT)
+		{
+			err = s5k4ecgx_set_from_table(sd, "return night preview",
+					&state->regs->night_preview_return, 1, 0);
 
-	if (set_size) {
+		if (err < 0) {
+			dev_err(&client->dev,
+				"%s: failed: s5k4ecgx_return_night_preview\n",
+				__func__);
+			return -EIO;
+		}
+		}
+
+		/* Beach/Snow/Fireworks Scene mode add needed */
+		if( (parms->scene_mode == SCENE_MODE_BEACH_SNOW) || (parms->scene_mode == SCENE_MODE_FIREWORKS) )
+		{
+			err = s5k4ecgx_set_from_table(sd, "return beach fireworks preview",
+					&state->regs->beach_fireworks_preview_return, 1, 0);
+
+		if (err < 0) {
+			dev_err(&client->dev,
+						"%s: failed: s5k4ecgx_return_night_preview\n",
+				__func__);
+			return -EIO;
+		}
+	}
+#else
+		/* Nothing needed */
+#endif
+
+	} else {
+#ifdef NEW_CAMERA
+		if(camcorder_check_flag == 1){ /* 1: Movie mode */
+		//	printk("[%s:%d] Check in\n", __func__, __LINE__);
+			err = s5k4ecgx_set_from_table(sd, "camcorder_preview_size",
+					state->regs->camcorder_preview_size,
+					ARRAY_SIZE(state->regs->camcorder_preview_size),
+					state->framesize_index);
+		} else {
+
+			if( state->vt_mode == 1) {
+			//	printk("[%s:%d] Qik for preview_size\n",__func__, __LINE__);
+				if( s5k4ecgx_set_from_table(sd, "640 Preview Qik",
+						&state->regs->s5k4ecgx_640_preview_qik, 1, 0) < 0)
+					return -EIO;
+			}
+			else
+			{
+		//		printk("[%s:%d] Check in\n", __func__, __LINE__);
 		err = s5k4ecgx_set_from_table(sd, "preview_size",
 					state->regs->preview_size,
 					ARRAY_SIZE(state->regs->preview_size),
-					state->preview_framesize_index);
+						state->framesize_index);
+
 		if (err < 0) {
 			dev_err(&client->dev,
 				"%s: failed: Could not set preview size\n",
@@ -846,12 +1334,286 @@ static int s5k4ecgx_set_preview_start(struct v4l2_subdev *sd)
 			return -EIO;
 		}
 	}
+		}
+#else
+		err = s5k4ecgx_set_from_table(sd, "preview_size",
+				state->regs->preview_size,
+				ARRAY_SIZE(state->regs->preview_size),
+				state->framesize_index);
+
+		if (err < 0) {
+			dev_err(&client->dev,
+					"%s: failed: Could not set preview size\n",
+					__func__);
+			return -EIO;
+		}
+
+
+#endif
+	}
+
+#ifdef NEW_CAMERA 
+	/* Camera Preview delay by using polling for low fps */
+	s5k4ecgx_check_REG_TC_GP_EnablePreviewChanged(sd);
+#endif
 
 	dev_dbg(&client->dev, "%s: runmode now RUNNING\n", __func__);
 	state->runmode = S5K4ECGX_RUNMODE_RUNNING;
 
 	return 0;
 }
+
+#if 1 /* For the Touch AF implemention  */
+#if 0
+// 416 * 320 Based window
+#define AF_OUTER_WINDOW_WIDTH   208
+#define AF_OUTER_WINDOW_HEIGHT  177
+#define AF_INNER_WINDOW_WIDTH   93
+#define AF_INNER_WINDOW_HEIGHT  95
+#else
+// 640 * 480 Based window
+#define AF_OUTER_WINDOW_WIDTH  320
+#define AF_OUTER_WINDOW_HEIGHT 266
+#define AF_INNER_WINDOW_WIDTH  143
+#define AF_INNER_WINDOW_HEIGHT 143
+
+#define AE_WINDOW_WIDTH 143
+#define AE_WINDOW_HEIGHT 143
+
+#endif
+static int s5k4ecgx_touch_auto_focus(struct v4l2_subdev *sd, int value)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct s5k4ecgx_state *state =
+		container_of(sd, struct s5k4ecgx_state, sd);
+	struct sec_cam_parm *parms =
+		(struct sec_cam_parm *)&state->strm.parm.raw_data;
+	int err;
+	unsigned short FirstWinStartX, FirstWinStartY, SecondWinStartX, SecondWinStartY;
+	unsigned short DefaultFirstWinStartX, DefaultFirstWinStartY, DefaultSecondWinStartX, DefaultSecondWinStartY;
+	int preview_width, preview_height;
+	int count, read_value;
+
+	preview_width = state->pix.width;
+	preview_height = state->pix.height;
+
+	DefaultFirstWinStartX = (preview_width - AF_OUTER_WINDOW_WIDTH) / 2; /* 640x480 => 160, 800x480 => 240 */
+	DefaultFirstWinStartY = (preview_height - AF_OUTER_WINDOW_HEIGHT) / 2; /* 640x480 => 107, 800x480 => 107 */
+	DefaultSecondWinStartX = (preview_width - AF_INNER_WINDOW_WIDTH) / 2; /* 640x480 => 248, 800x480 => 160 */
+	DefaultSecondWinStartY = (preview_height - AF_INNER_WINDOW_HEIGHT) / 2; /* 640x480 => 328, 800x480 => 160 */
+
+	//printk("[%s:%d] preview_width %d, preview_height %d\n",__func__, __LINE__, preview_width, preview_height);
+	//printk("[%s:%d] DefaultFirstWinStartX %d, DefaultFirstWinStartY %d\n",__func__, __LINE__, DefaultFirstWinStartX, DefaultFirstWinStartY);
+	//printk("[%s:%d] DefaultSecondWinStartX %d, DefaultSecondWinStartY %d\n",__func__, __LINE__,DefaultSecondWinStartX ,DefaultSecondWinStartY );
+
+
+	/* value 0 is Touch AF Stop, 1 is Touch AF start */
+	if(value == 0)	{ /* AF stop */
+		s5k4ecgx_i2c_write_twobyte(client, 0xFCFC, 0xD000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x0294);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (unsigned short)((DefaultFirstWinStartX << 10) / preview_width)); /* FstWinStartX */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (unsigned short)((DefaultFirstWinStartY << 10) / preview_height)); /* FstWinStartY */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (320 << 10) / preview_width  ); /* FstWinSizeX : 320 */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (266 << 10) / preview_height );  /* FstWinSizeY : 266 */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (unsigned short)((DefaultSecondWinStartX << 10) / preview_width)); /* ScndWinStartX */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (unsigned short)((DefaultSecondWinStartY << 10) / preview_height)); /* ScndWinStartY */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (143 << 10) / preview_width  ); /* ScndWinSizeX : 143 */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (143 << 10) / preview_height ); /* ScndWinSizeY : 143  */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* WinSizesUpdated */
+		
+		/* AF window applied delay */
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)
+			msleep(250);
+		else
+			msleep(state->one_frame_delay_ms); 
+	}
+	else if(value == 1) { /* AF start */
+		// Prevent divided-by-zero.
+		if(preview_width == 0 || preview_height == 0) {
+			dev_err(&client->dev, "%s: Either preview_width or preview_height is zero\n", __func__);
+			return -EIO;
+		}
+
+		FirstWinStartX = state->position.x;
+		FirstWinStartY = state->position.y;
+		//printk("[%s:%d] FirstWinStartX %d, FirstWinStartY %d\n",__func__, __LINE__,  FirstWinStartX, FirstWinStartY);
+
+		// AF Position(Round Down)
+		if(FirstWinStartX > AF_OUTER_WINDOW_WIDTH/2) {
+			FirstWinStartX -= AF_OUTER_WINDOW_WIDTH/2;
+
+			if(FirstWinStartX + AF_OUTER_WINDOW_WIDTH > preview_width) {
+				dev_err(&client->dev, "%s: X Position Overflow : [%d, %d] \n", __func__, FirstWinStartX, AF_OUTER_WINDOW_WIDTH);
+
+				FirstWinStartX = preview_width - AF_OUTER_WINDOW_WIDTH - 1;
+			}
+		}
+		else
+			FirstWinStartX = 0;
+
+
+		if(FirstWinStartY > AF_OUTER_WINDOW_HEIGHT/2)	{
+			FirstWinStartY -= AF_OUTER_WINDOW_HEIGHT/2;
+
+			if(FirstWinStartY + AF_OUTER_WINDOW_HEIGHT > preview_height) {
+				dev_err(&client->dev, "%s: Y Position Overflow : [%d, %d] \n", __func__, FirstWinStartY, AF_OUTER_WINDOW_HEIGHT);
+
+				FirstWinStartY = preview_height - AF_OUTER_WINDOW_HEIGHT - 1;
+			}
+		}
+		else
+			FirstWinStartY = 0;
+
+		//printk("[%s:%d] FirstWinStartX %d, FirstWinStartY %d\n",__func__, __LINE__, FirstWinStartX, FirstWinStartY);
+
+		FirstWinStartX = (unsigned short)((FirstWinStartX << 10) / preview_width);
+		FirstWinStartY = (unsigned short)((FirstWinStartY << 10) / preview_height);
+
+		SecondWinStartX = FirstWinStartX + 140;
+		SecondWinStartY = FirstWinStartY + 131;
+
+		s5k4ecgx_i2c_write_twobyte(client, 0xFCFC, 0xD000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x0294);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, FirstWinStartX); /* FstWinStartX */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, FirstWinStartY); /* FstWinStartY */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (320 << 10) / preview_width  ); /* FstWinSizeX : 320 */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (266 << 10) / preview_height );  /* FstWinSizeY : 266 */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, SecondWinStartX); /* ScndWinStartX */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, SecondWinStartY); /* ScndWinStartY */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (143 << 10) / preview_width  ); /* ScndWinSizeX : 143 */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, (143 << 10) / preview_height ); /* ScndWinSizeY : 143  */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* WinSizesUpdated */
+		
+		/* AF window applied delay */
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)
+			msleep(250);
+		else
+//			msleep(150); 
+			msleep(state->one_frame_delay_ms);
+
+#if 1
+		/* AE stable check */
+		/* enter read mode */
+		s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
+		for (count = 0; count < AE_STABLE_SEARCH_COUNT; count++) {
+			if (state->af_status == AF_CANCEL)
+				break;
+			s5k4ecgx_set_from_table(sd, "get ae stable status",
+					&state->regs->get_ae_stable_status, 1, 0);
+			s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value);
+			dev_dbg(&client->dev, "%s: ae stable status = %#x\n",
+					__func__, read_value);
+			if (read_value == 0x1)
+				break;
+			msleep(state->one_frame_delay_ms);
+		}
+
+		/* restore write mode */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+#endif
+		state->touch_ae_af_state = 1;
+
+		/* Are we need "Touch AE Weight"? */
+		/* FIXME */
+	} else if(value == 2){ /* stop touch AE */
+	
+		s5k4ecgx_i2c_write_twobyte(client, 0xFCFC, 0xD000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x395C);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0000); /* FDA_bUseFaceAlg, Touched AE&AF support on/off */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0000); /* FDA_bUseConfigChange, Change config */
+	
+#if 0
+		msleep(100); /* Setting Applied delay */
+#if 1
+		/* AE stable check */
+		/* enter read mode */
+		s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
+		for (count = 0; count < AE_STABLE_SEARCH_COUNT; count++) {
+			if (state->af_status == AF_CANCEL)
+				break;
+			s5k4ecgx_set_from_table(sd, "get ae stable status",
+					&state->regs->get_ae_stable_status, 1, 0);
+			s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value);
+			dev_dbg(&client->dev, "%s: ae stable status = %#x\n",
+					__func__, read_value);
+			if (read_value == 0x1)
+				break;
+			msleep(state->one_frame_delay_ms);
+		}
+
+		/* restore write mode */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+#endif
+#endif
+	
+		state->touch_ae_af_state = 0;
+
+	} else if(value == 3){ /* start touch AE */
+
+		unsigned int aeX = 0, aeY = 0;
+
+		aeX = state->position.x;
+		aeY = state->position.y; 
+
+		// AE Position(Round Down)
+		if(aeX > AE_WINDOW_WIDTH/2) {
+			aeX -= AE_WINDOW_WIDTH/2;
+
+			if(aeX + AE_WINDOW_WIDTH > preview_width) {
+				dev_err(&client->dev, "%s:[Touch AE] X Position Overflow : [%d, %d] \n", __func__, aeX, AE_WINDOW_WIDTH);
+				aeX = preview_width - AE_WINDOW_WIDTH - 1;
+			}
+		}
+		else
+			aeX = 0;
+
+		if(aeY > AE_WINDOW_HEIGHT/2) {
+			aeY -= AE_WINDOW_HEIGHT/2;
+
+			if(aeY + AE_WINDOW_HEIGHT > preview_height) {
+				dev_err(&client->dev, "%s:[Touch AE] Y Position Overflow : [%d, %d] \n", __func__, aeY, AE_WINDOW_HEIGHT);
+				aeY = preview_width - AE_WINDOW_HEIGHT - 1;
+			}
+		}
+		else
+			aeY = 0;
+
+		if(state->touch_ae_af_state == 0) /* Default setting */
+		{
+			s5k4ecgx_i2c_write_twobyte(client, 0xFCFC, 0xD000);
+			s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+			s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x395C);
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* FDA_bUseFaceAlg, Touched AE&AF support on/off */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* FDA_bUseConfigChange, Change config */
+			s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x3962); /* FDA_FaceArr */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0000); /* FDA_FaceArr_0_X_Start, region start x position */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0000); /* FDA_FaceArr_0_Y_Start, region start y position */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, preview_width ); /* FDA_FaceArr_0_X_End, region end x position */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, preview_height ); /* FDA_FaceArr_0_Y_End, region end y position */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x003D); /* FDA_FaceArr_0_ABR, region target brightness */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0000); /* FDA_FaceArr_0__Weigt_Ratio, Weight ratio between region and backtround */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* FDA_FaceArr_0__UpdateState, region change update */
+			s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* FDA_FaceArr_0__bUpdate, use or not use*/
+		}
+//		printk("[%s:%d] state->touch_ae_af_state %d\n", __func__, __LINE__, state->touch_ae_af_state);
+		s5k4ecgx_i2c_write_twobyte(client, 0xFCFC, 0xD000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x3962); /* FDA_FaceArr */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, aeX ); /* FDA_FaceArr_0_X_Start, region start x position */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, aeY ); /* FDA_FaceArr_0_Y_Start, region start y position */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, aeX + AE_WINDOW_WIDTH ); /* FDA_FaceArr_0_X_End, region end x position */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, aeY + AE_WINDOW_HEIGHT ); /* FDA_FaceArr_0_Y_End, region end y position */
+		s5k4ecgx_i2c_write_twobyte(client, 0x002A, 0x396C); /* FDA_FaceArr_0__Weigt_Ratio, Weight ratio between region and backtround */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0100); /* FDA_FaceArr_0__Weigt_Ratio, Weight ratio between region and backtround */
+		s5k4ecgx_i2c_write_twobyte(client, 0x0F12, 0x0001); /* FDA_FaceArr_0__UpdateState, region change update */
+	}
+
+	return 0;
+}
+#endif
 
 static int s5k4ecgx_set_capture_size(struct v4l2_subdev *sd)
 {
@@ -861,16 +1623,19 @@ static int s5k4ecgx_set_capture_size(struct v4l2_subdev *sd)
 	int err;
 
 	dev_dbg(&client->dev, "%s: index:%d\n", __func__,
-		state->capture_framesize_index);
+		state->framesize_index);
 
+#if 0
+	printk("Capture size is %d framesize_index is %d\n", state->regs->capture_size, state->framesize_index);
+#endif
 	err = s5k4ecgx_set_from_table(sd, "capture_size",
 				state->regs->capture_size,
 				ARRAY_SIZE(state->regs->capture_size),
-				state->capture_framesize_index);
+				state->framesize_index);
 	if (err < 0) {
 		dev_err(&client->dev,
-			"%s: failed: i2c_write for capture_size index %d\n",
-			__func__, state->capture_framesize_index);
+			"%s: failed: i2c_write for capture_resolution\n",
+			__func__);
 	}
 	state->runmode = S5K4ECGX_RUNMODE_CAPTURE;
 
@@ -885,28 +1650,33 @@ static int s5k4ecgx_set_jpeg_quality(struct v4l2_subdev *sd)
 
 	dev_dbg(&client->dev,
 		"%s: jpeg.quality %d\n", __func__, state->jpeg.quality);
-	if (state->jpeg.quality < 0)
-		state->jpeg.quality = 0;
-	if (state->jpeg.quality > 100)
-		state->jpeg.quality = 100;
 
-	switch (state->jpeg.quality) {
-	case 90 ... 100:
-		dev_dbg(&client->dev,
-			"%s: setting to high jpeg quality\n", __func__);
-		return s5k4ecgx_set_from_table(sd, "jpeg quality high",
-				&state->regs->jpeg_quality_high, 1, 0);
-	case 80 ... 89:
-		dev_dbg(&client->dev,
-			"%s: setting to normal jpeg quality\n", __func__);
-		return s5k4ecgx_set_from_table(sd, "jpeg quality normal",
-				&state->regs->jpeg_quality_normal, 1, 0);
-	default:
-		dev_dbg(&client->dev,
-			"%s: setting to low jpeg quality\n", __func__);
-		return s5k4ecgx_set_from_table(sd, "jpeg quality low",
-				&state->regs->jpeg_quality_low, 1, 0);
-	}
+	switch(state->jpeg.quality) 
+	{
+		case JPEG_QUALITY_SUPERFINE:
+		{
+    		return s5k4ecgx_set_from_table(sd, "jpeg quality high",
+    				&state->regs->jpeg_quality_high, 1, 0);
+        }
+
+		case JPEG_QUALITY_FINE:
+		{
+    		return s5k4ecgx_set_from_table(sd, "jpeg quality normal",
+    				&state->regs->jpeg_quality_normal, 1, 0);
+        }
+        
+		case JPEG_QUALITY_NORMAL:
+		{
+    		return s5k4ecgx_set_from_table(sd, "jpeg quality low",
+    				&state->regs->jpeg_quality_low, 1, 0);
+        }
+
+        default:
+        {
+    		return s5k4ecgx_set_from_table(sd, "jpeg quality high",
+    				&state->regs->jpeg_quality_high, 1, 0);
+        }
+    }
 }
 
 static u16 s5k4ecgx_get_light_level(struct v4l2_subdev *sd)
@@ -953,27 +1723,10 @@ static int s5k4ecgx_start_capture(struct v4l2_subdev *sd)
 		(struct sec_cam_parm *)&state->strm.parm.raw_data;
 	struct s5k4ecgx_platform_data *pdata = client->dev.platform_data;
 
-	/* reset cropping if our current preview is not 640x480,
-	 * otherwise the capture will be wrong because of the cropping
-	 */
-	if (state->preview_framesize_index != S5K4ECGX_PREVIEW_VGA) {
-		int err = s5k4ecgx_set_from_table(sd, "reset crop",
-						&state->regs->reset_crop, 1, 0);
-		if (err < 0) {
-			dev_err(&client->dev,
-				"%s: failed: Could not set preview size\n",
-				__func__);
-			return -EIO;
-		}
-		state->restore_preview_size_needed = true;
-	} else
-		state->restore_preview_size_needed = false;
-
 	light_level = s5k4ecgx_get_light_level(sd);
 
 	dev_dbg(&client->dev, "%s: light_level = %d\n", __func__,
 		light_level);
-
 	state->flash_state_on_previous_capture = false;
 	if (parms->scene_mode != SCENE_MODE_NIGHTSHOT) {
 		switch (parms->flash_mode) {
@@ -1013,12 +1766,36 @@ static int s5k4ecgx_start_capture(struct v4l2_subdev *sd)
 	 * have their own settings (though a low light sport setting
 	 * could be useful)
 	 */
-	if ((light_level <= HIGH_LIGHT_LEVEL) &&
+
+			if ((light_level <= HIGH_LIGHT_LEVEL) &&
 		(parms->scene_mode != SCENE_MODE_NIGHTSHOT) &&
-		(parms->scene_mode != SCENE_MODE_SPORTS)) {
-		s5k4ecgx_set_from_table(sd, "low cap on",
-					&state->regs->low_cap_on, 1, 0);
+				(parms->scene_mode != SCENE_MODE_SPORTS)) {
+				s5k4ecgx_set_from_table(sd, "low cap on",
+							&state->regs->low_cap_on, 1, 0);
+			}
+
+
+#ifdef NEW_CAMERA
+	/* Nothing needed */
+#else
+	/* NIGHT Scene capture setting */
+	/* Night shot has no concerned Low Light status */
+	if( parms->scene_mode == SCENE_MODE_NIGHTSHOT )
+	{
+		s5k4ecgx_set_from_table(sd, "night cap",
+					&state->regs->night_cap, 1, 0);
 	}
+
+
+	/* BEACH, SNOW, FIRE capture setting */
+	if ( (light_level > HIGH_LIGHT_LEVEL) && 
+			(parms->scene_mode == SCENE_MODE_BEACH_SNOW || 
+			 parms->scene_mode == SCENE_MODE_FIREWORKS) )
+	{
+		s5k4ecgx_set_from_table(sd, "beach snow fire cap",
+					&state->regs->beach_snow_fire_cap, 1, 0);
+		}
+#endif
 
 	err = s5k4ecgx_set_capture_size(sd);
 	if (err < 0) {
@@ -1058,8 +1835,7 @@ static int s5k4ecgx_start_capture(struct v4l2_subdev *sd)
 	/* restore write mode */
 	s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
 
-	s5k4ecgx_set_from_table(sd, "ae awb lock off",
-				&state->regs->ae_awb_lock_off, 1, 0);
+
 
 	if ((light_level <= HIGH_LIGHT_LEVEL) &&
 		(parms->scene_mode != SCENE_MODE_NIGHTSHOT) &&
@@ -1067,6 +1843,20 @@ static int s5k4ecgx_start_capture(struct v4l2_subdev *sd)
 		s5k4ecgx_set_from_table(sd, "low cap off",
 					&state->regs->low_cap_off, 1, 0);
 	}
+
+#ifndef NEW_CAMERA
+	s5k4ecgx_set_from_table(sd, "ae awb lock off",
+				&state->regs->ae_awb_lock_off, 1, 0);
+#else
+	s5k4ecgx_set_from_table(sd, "ae unlock",
+				&state->regs->ae_unlock, 1, 0);
+	if( parms->white_balance == WHITE_BALANCE_AUTO )
+	{
+		s5k4ecgx_set_from_table(sd, "awb unlock",
+				&state->regs->awb_unlock, 1, 0);
+	}
+#endif
+
 
 	if ((parms->scene_mode != SCENE_MODE_NIGHTSHOT) && (state->flash_on)) {
 		state->flash_on = false;
@@ -1102,6 +1892,31 @@ static int s5k4ecgx_set_face_detection(struct v4l2_subdev *sd, int value)
 	return s5k4ecgx_set_from_table(sd, "face detection off",
 				&state->regs->face_detection_off, 1, 0);
 }
+
+
+#if 1 /* For fix 30fps */
+static int s5k4ecgx_set_sensor_mode(struct v4l2_subdev *sd, int value)
+{
+	//struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct s5k4ecgx_state *state =
+			container_of(sd, struct s5k4ecgx_state, sd);
+	//struct sec_cam_parm *parms =	(struct sec_cam_parm *)&state->strm.parm.raw_data;
+	int err;
+
+	if(value == 1) /* 1 MOVIE MODE */
+	{
+//		dev_dbg("[%s:%d] Set fix fpx 30 for MOVIE MODE\n", __func__, __LINE__);
+		err = s5k4ecgx_set_from_table(sd, "fix 30fps",
+				&state->regs->set_fix_fps, 1, 0);
+	}
+	else
+	{
+//		dev_dbg("[%s:%d] Set Camera Mode, fps variation\n", __func__, __LINE__);
+	}
+	return 0;
+}
+#endif
+
 
 static int s5k4ecgx_set_focus_mode(struct v4l2_subdev *sd, int value)
 {
@@ -1146,6 +1961,37 @@ static int s5k4ecgx_set_focus_mode(struct v4l2_subdev *sd, int value)
 			goto fail;
 		parms->focus_mode = FOCUS_MODE_INFINITY;
 		break;
+#ifdef NEW_CAMERA
+	case FOCUS_MODE_POWEROFF:
+		dev_dbg(&client->dev,
+			"%s: AF POWER OFF function for noise reduction\n", __func__);
+		err = s5k4ecgx_set_from_table(sd,
+			"af normal mode 1",
+			&state->regs->af_normal_mode_1, 1, 0);
+		if (err < 0)
+			goto fail;
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)
+			mdelay(250);
+		else
+			mdelay(100);
+		err = s5k4ecgx_set_from_table(sd,
+			"af normal mode 2",
+			&state->regs->af_normal_mode_2, 1, 0);
+		if (err < 0)
+			goto fail;
+		if(parms->scene_mode == SCENE_MODE_NIGHTSHOT)
+			mdelay(250);
+		else
+			mdelay(130);
+/*
+		err = s5k4ecgx_set_from_table(sd,
+			"af normal mode 4",
+			&state->regs->af_normal_mode_4, 1, 0);
+		if (err < 0)
+			goto fail;
+*/
+		break;
+#endif
 
 	case FOCUS_MODE_AUTO:
 	default:
@@ -1196,7 +2042,7 @@ static void s5k4ecgx_auto_focus_flash_start(struct v4l2_subdev *sd)
 	/* delay 200ms (SLSI value) and then poll to see if AE is stable.
 	 * once it is stable, lock it and then return to do AF
 	 */
-	msleep(200);
+	mdelay(200);
 
 	/* enter read mode */
 	s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
@@ -1239,20 +2085,18 @@ static int s5k4ecgx_start_auto_focus(struct v4l2_subdev *sd)
 	dev_dbg(&client->dev, "%s: start SINGLE AF operation, flash mode %d\n",
 		__func__, parms->flash_mode);
 
-	/* in case user calls auto_focus repeatedly without a cancel
-	 * or a capture, we need to cancel here to allow ae_awb
-	 * to work again, or else we could be locked forever while
-	 * that app is running, which is not the expected behavior.
-	 */
-	s5k4ecgx_set_from_table(sd, "ae awb lock off",
-				&state->regs->ae_awb_lock_off, 1, 0);
-
+#ifndef NEW_CAMERA
 	if (parms->scene_mode == SCENE_MODE_NIGHTSHOT) {
 		/* user selected night shot mode, assume we need low light
 		 * af mode.  flash is always off in night shot mode
 		 */
 		goto enable_af_low_light_mode;
 	}
+#else
+	
+	/* Nothing needed */
+
+#endif
 
 	light_level = s5k4ecgx_get_light_level(sd);
 
@@ -1277,6 +2121,7 @@ static int s5k4ecgx_start_auto_focus(struct v4l2_subdev *sd)
 		break;
 	}
 
+#ifndef NEW_CAMERA
 	if (light_level > LOW_LIGHT_LEVEL) {
 		if (state->sensor_af_in_low_light_mode) {
 			state->sensor_af_in_low_light_mode = false;
@@ -1291,7 +2136,28 @@ enable_af_low_light_mode:
 				&state->regs->af_low_light_mode_on, 1, 0);
 		}
 	}
+#else
+	
+	/* Nothing needed */
 
+#endif
+
+	/* lock AE and AWB during AF and until capture is complete or AF
+	 * is cancelled
+	 */
+
+#ifndef NEW_CAMERA
+	s5k4ecgx_set_from_table(sd, "ae awb lock on",
+				&state->regs->ae_awb_lock_on, 1, 0);
+#else
+	s5k4ecgx_set_from_table(sd, "ae lock",
+				&state->regs->ae_lock, 1, 0);
+	if( parms->white_balance == WHITE_BALANCE_AUTO )
+	{
+		s5k4ecgx_set_from_table(sd, "awb lock",
+				&state->regs->awb_lock, 1, 0);
+	}
+#endif
 	s5k4ecgx_set_from_table(sd, "single af start",
 				&state->regs->single_af_start, 1, 0);
 	state->af_status = AF_START;
@@ -1318,8 +2184,18 @@ static int s5k4ecgx_stop_auto_focus(struct v4l2_subdev *sd)
 	/* restore write mode */
 	s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
 
+#ifndef NEW_CAMERA
 	s5k4ecgx_set_from_table(sd, "ae awb lock off",
 				&state->regs->ae_awb_lock_off, 1, 0);
+#else
+	s5k4ecgx_set_from_table(sd, "ae unlock",
+				&state->regs->ae_unlock, 1, 0);
+	if( parms->white_balance == WHITE_BALANCE_AUTO )
+	{
+		s5k4ecgx_set_from_table(sd, "awb unlock",
+				&state->regs->awb_unlock, 1, 0);
+	}
+#endif
 
 	if (state->af_status != AF_START) {
 		/* we weren't in the middle auto focus operation, we're done */
@@ -1361,6 +2237,19 @@ static int s5k4ecgx_stop_auto_focus(struct v4l2_subdev *sd)
 	s5k4ecgx_set_from_table(sd, "single af off 2",
 				&state->regs->single_af_off_2, 1, 0);
 
+#if 0
+	/* restore write mode */
+	s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+
+	s5k4ecgx_set_from_table(sd, "ae awb lock off",
+				&state->regs->ae_awb_lock_off, 1, 0);
+
+	if (parms->focus_mode == FOCUS_MODE_MACRO)
+		s5k4ecgx_set_focus_mode(sd, FOCUS_MODE_MACRO);
+	else
+		s5k4ecgx_set_focus_mode(sd, FOCUS_MODE_AUTO);
+#endif
+
 	/* wait until the other thread has completed
 	 * aborting the auto focus and restored state
 	 */
@@ -1397,41 +2286,49 @@ static int s5k4ecgx_get_auto_focus_result(struct v4l2_subdev *sd,
 
 	/* must delay 2 frame times before checking result of 1st phase */
 	mutex_unlock(&state->ctrl_lock);
+#if 1 /* Low light Case */
+	if( s5k4ecgx_get_light_level(sd) < HIGH_LIGHT_LEVEL )
+	{
+//		printk("[%s:%d] light level is %d\n", __func__, __LINE__, s5k4ecgx_get_light_level(sd));
+//		msleep(NIGHT_MODE_MAX_ONE_FRAME_DELAY_MS * 2);
+		msleep(300); /* 300 msec */
+	}
+	else
+#endif
 	msleep(state->one_frame_delay_ms*2);
 	mutex_lock(&state->ctrl_lock);
-
-	/* lock AE and AWB after first AF search */
-	s5k4ecgx_set_from_table(sd, "ae awb lock on",
-				&state->regs->ae_awb_lock_on, 1, 0);
 
 	dev_dbg(&client->dev, "%s: 1st AF search\n", __func__);
 	/* enter read mode */
 	s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
-	for (count = 0; count < FIRST_AF_SEARCH_COUNT; count++) {
-		if (state->af_status == AF_CANCEL) {
-			dev_dbg(&client->dev,
+		for (count = 0; count < FIRST_AF_SEARCH_COUNT; count++) {
+			if (state->af_status == AF_CANCEL) {
+				dev_dbg(&client->dev,
 				"%s: AF is cancelled while doing\n", __func__);
-			ctrl->value = AUTO_FOCUS_CANCELLED;
-			goto check_flash;
-		}
-		s5k4ecgx_set_from_table(sd, "get 1st af search status",
+				ctrl->value = AUTO_FOCUS_CANCELLED;
+				goto check_flash;
+			}
+			s5k4ecgx_set_from_table(sd, "get 1st af search status",
 					&state->regs->get_1st_af_search_status,
 					1, 0);
-		s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value);
-		dev_dbg(&client->dev,
+			s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value);
+			dev_dbg(&client->dev,
 			"%s: 1st i2c_read --- read_value == 0x%x\n",
 			__func__, read_value);
 
-		/* check for success and failure cases.  0x1 is
-		 * auto focus still in progress.  0x2 is success.
-		 * 0x0,0x3,0x4,0x6,0x8 are all failures cases
-		 */
+			/* check for success and failure cases.  0x1 is
+			 * auto focus still in progress.  0x2 is success.
+			 * 0x0,0x3,0x4,0x6,0x8 are all failures cases
+			 */
 		if (read_value != 0x01)
-			break;
-		mutex_unlock(&state->ctrl_lock);
-		msleep(50);
-		mutex_lock(&state->ctrl_lock);
-	}
+		{
+	//		printk("[%s:%d] count : %d read_value == 0x%x\n", __func__, __LINE__,count, read_value);
+				break;
+		}
+			mutex_unlock(&state->ctrl_lock);
+			msleep(50);
+			mutex_lock(&state->ctrl_lock);
+		}
 
 	if ((count >= FIRST_AF_SEARCH_COUNT) || (read_value != 0x02)) {
 		dev_dbg(&client->dev,
@@ -1444,6 +2341,14 @@ static int s5k4ecgx_get_auto_focus_result(struct v4l2_subdev *sd,
 
 	/* delay 1 frame time before checking for 2nd AF completion */
 	mutex_unlock(&state->ctrl_lock);
+#if 1 /* Low Light Case */
+	if( s5k4ecgx_get_light_level(sd) < HIGH_LIGHT_LEVEL )
+	{
+		msleep(300);
+		//	msleep(NIGHT_MODE_MAX_ONE_FRAME_DELAY_MS);
+	}
+	else
+#endif
 	msleep(state->one_frame_delay_ms);
 	mutex_lock(&state->ctrl_lock);
 
@@ -1493,7 +2398,7 @@ check_flash:
 		s5k4ecgx_set_from_table(sd, "AF assist flash end",
 				&state->regs->af_assist_flash_end, 1, 0);
 		state->flash_on = false;
-		pd->af_assist_onoff(0);
+		pd->flash_onoff(0);
 	}
 
 	dev_dbg(&client->dev, "%s: single AF finished\n", __func__);
@@ -1501,6 +2406,7 @@ check_flash:
 	complete(&state->af_complete);
 	return err;
 }
+
 
 static void s5k4ecgx_init_parameters(struct v4l2_subdev *sd)
 {
@@ -1524,6 +2430,7 @@ static void s5k4ecgx_init_parameters(struct v4l2_subdev *sd)
 	parms->scene_mode = SCENE_MODE_NONE;
 	parms->sharpness = SHARPNESS_DEFAULT;
 	parms->white_balance = WHITE_BALANCE_AUTO;
+	parms->sensor_mode = 0;
 
 	state->jpeg.enable = 0;
 	state->jpeg.quality = 100;
@@ -1586,9 +2493,15 @@ static int s5k4ecgx_s_fmt(struct v4l2_subdev *sd, struct v4l2_format *fmt)
 		 * if the given video resolution is not matching, use
 		 * the default rate (currently S5K4ECGX_PREVIEW_WVGA).
 		 */
+#ifdef NEW_CAMERA
+		s5k4ecgx_set_framesize(sd, s5k4ecgx_camcorder_preview_framesize_list,
+				ARRAY_SIZE(s5k4ecgx_camcorder_preview_framesize_list),
+				true);
+#else
 		s5k4ecgx_set_framesize(sd, s5k4ecgx_preview_framesize_list,
 				ARRAY_SIZE(s5k4ecgx_preview_framesize_list),
 				true);
+#endif
 	}
 
 	state->jpeg.enable = state->pix.pixelformat == V4L2_PIX_FMT_JPEG;
@@ -1663,7 +2576,7 @@ static void s5k4ecgx_enable_torch(struct v4l2_subdev *sd)
 	s5k4ecgx_set_from_table(sd, "flash start",
 				&state->regs->flash_start, 1, 0);
 	state->flash_on = true;
-	pdata->torch_onoff(1);
+	pdata->flash_onoff(3);
 }
 
 static void s5k4ecgx_disable_torch(struct v4l2_subdev *sd)
@@ -1675,7 +2588,7 @@ static void s5k4ecgx_disable_torch(struct v4l2_subdev *sd)
 
 	if (state->flash_on) {
 		state->flash_on = false;
-		pdata->torch_onoff(0);
+		pdata->flash_onoff(0);
 		s5k4ecgx_set_from_table(sd, "flash end",
 					&state->regs->flash_end, 1, 0);
 	}
@@ -1690,11 +2603,11 @@ static int s5k4ecgx_set_flash_mode(struct v4l2_subdev *sd, int value)
 	if (parms->flash_mode == value)
 		return 0;
 
-	if ((value >= FLASH_MODE_OFF) && (value <= FLASH_MODE_TORCH)) {
+	if ((value >= FLASH_MODE_OFF) && (value <= FLASH_MODE_BACKLIGHT_ON)) {
 		pr_debug("%s: setting flash mode to %d\n",
 			__func__, value);
 		parms->flash_mode = value;
-		if (parms->flash_mode == FLASH_MODE_TORCH)
+		if (parms->flash_mode == FLASH_MODE_TORCH_ON)
 			s5k4ecgx_enable_torch(sd);
 		else
 			s5k4ecgx_disable_torch(sd);
@@ -1761,55 +2674,22 @@ static int s5k4ecgx_s_parm(struct v4l2_subdev *sd,
 		parms->capture.timeperframe.numerator = 1;
 		parms->capture.timeperframe.denominator = fps;
 	}
+    dev_dbg(&client->dev, " set frame rate %d\n",parms->capture.timeperframe.denominator);
+    
+    if(parms->capture.timeperframe.denominator == 15){
+          err = s5k4ecgx_set_from_table(sd, " 15 fps",
+                                      &state->regs->set_15_fps, 1, 0);
+    }else{
+        if(camcorder_check_flag == 1){    
+            err = s5k4ecgx_set_from_table(sd, " fixed fps",
+                                        &state->regs->set_fix_fps, 1, 0);
+        }else{
+            err = s5k4ecgx_set_from_table(sd, " auto fps",
+                                        &state->regs->set_auto_fps, 1, 0);
+        }
+    }
 
-	/* we return an error if one happened but don't stop trying to
-	 * set all parameters passed
-	 */
-	err = s5k4ecgx_set_parameter(sd, &parms->contrast, new_parms->contrast,
-				"contrast", state->regs->contrast,
-				ARRAY_SIZE(state->regs->contrast));
-	err |= s5k4ecgx_set_parameter(sd, &parms->effects, new_parms->effects,
-				"effect", state->regs->effect,
-				ARRAY_SIZE(state->regs->effect));
-	err |= s5k4ecgx_set_parameter(sd, &parms->brightness,
-				new_parms->brightness, "brightness",
-				state->regs->ev, ARRAY_SIZE(state->regs->ev));
-	err |= s5k4ecgx_set_flash_mode(sd, new_parms->flash_mode);
-	err |= s5k4ecgx_set_focus_mode(sd, new_parms->focus_mode);
-	err |= s5k4ecgx_set_parameter(sd, &parms->iso, new_parms->iso,
-				"iso", state->regs->iso,
-				ARRAY_SIZE(state->regs->iso));
-	err |= s5k4ecgx_set_parameter(sd, &parms->metering, new_parms->metering,
-				"metering", state->regs->metering,
-				ARRAY_SIZE(state->regs->metering));
-	err |= s5k4ecgx_set_parameter(sd, &parms->saturation,
-				new_parms->saturation, "saturation",
-				state->regs->saturation,
-				ARRAY_SIZE(state->regs->saturation));
-	err |= s5k4ecgx_set_parameter(sd, &parms->scene_mode,
-				new_parms->scene_mode, "scene_mode",
-				state->regs->scene_mode,
-				ARRAY_SIZE(state->regs->scene_mode));
-	err |= s5k4ecgx_set_parameter(sd, &parms->sharpness,
-				new_parms->sharpness, "sharpness",
-				state->regs->sharpness,
-				ARRAY_SIZE(state->regs->sharpness));
-	err |= s5k4ecgx_set_parameter(sd, &parms->white_balance,
-				new_parms->white_balance, "white balance",
-				state->regs->white_balance,
-				ARRAY_SIZE(state->regs->white_balance));
-	err |= s5k4ecgx_set_parameter(sd, &parms->fps,
-				new_parms->fps, "fps",
-				state->regs->fps,
-				ARRAY_SIZE(state->regs->fps));
-
-	if (parms->scene_mode == SCENE_MODE_NIGHTSHOT)
-		state->one_frame_delay_ms = NIGHT_MODE_MAX_ONE_FRAME_DELAY_MS;
-	else
-		state->one_frame_delay_ms = NORMAL_MODE_MAX_ONE_FRAME_DELAY_MS;
-
-	dev_dbg(&client->dev, "%s: returning %d\n", __func__, err);
-	return err;
+        return 0;
 }
 
 /* This function is called from the g_ctrl api
@@ -1828,7 +2708,7 @@ static int s5k4ecgx_s_parm(struct v4l2_subdev *sd,
  */
 static void s5k4ecgx_set_framesize(struct v4l2_subdev *sd,
 				const struct s5k4ecgx_framesize *frmsize,
-				int frmsize_count, bool preview)
+				int frmsize_count, bool exact_match)
 {
 	struct s5k4ecgx_state *state =
 		container_of(sd, struct s5k4ecgx_state, sd);
@@ -1844,7 +2724,7 @@ static void s5k4ecgx_set_framesize(struct v4l2_subdev *sd,
 		 * In case of image capture mode,
 		 * if the given image resolution is not supported,
 		 * return the next higher image resolution. */
-		if (preview) {
+		if (exact_match) {
 			if (frmsize->width == state->pix.width &&
 				frmsize->height == state->pix.height) {
 				break;
@@ -1872,19 +2752,11 @@ static void s5k4ecgx_set_framesize(struct v4l2_subdev *sd,
 	if (frmsize > last_frmsize)
 		frmsize = last_frmsize;
 
+	state->framesize_index = frmsize->index;
 	state->pix.width = frmsize->width;
 	state->pix.height = frmsize->height;
-	if (preview) {
-		state->preview_framesize_index = frmsize->index;
-		dev_dbg(&client->dev, "%s: Preview Res Set: %dx%d, index %d\n",
-			__func__, state->pix.width, state->pix.height,
-			state->preview_framesize_index);
-	} else {
-		state->capture_framesize_index = frmsize->index;
-		dev_dbg(&client->dev, "%s: Capture Res Set: %dx%d, index %d\n",
-			__func__, state->pix.width, state->pix.height,
-			state->capture_framesize_index);
-	}
+	dev_dbg(&client->dev, "%s: Camera Res Set: %dx%d\n",
+		__func__, state->pix.width, state->pix.height);
 }
 
 static int s5k4ecgx_check_dataline_stop(struct v4l2_subdev *sd)
@@ -1916,6 +2788,8 @@ static void s5k4ecgx_get_esd_int(struct v4l2_subdev *sd,
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	u16 read_value;
 	int err;
+
+//	printk("[%s:%d] ESD CHECK routine\n", __func__, __LINE__);
 
 	if ((S5K4ECGX_RUNMODE_RUNNING == state->runmode) &&
 		(state->af_status != AF_START)) {
@@ -1967,13 +2841,13 @@ static int s5k4ecgx_get_iso(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	/* restore write mode */
 	s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
 
-	read_value = read_value1 * read_value2 / 0x100 / 2;
+	read_value = (read_value1 * read_value2 / 0x100)/2; /* divide by 384(decimal) */
 
-	if (read_value > 0x400)
+	if (read_value > 0x300)
 		ctrl->value = ISO_400;
-	else if (read_value > 0x200)
+	else if (read_value > 0x180)
 		ctrl->value = ISO_200;
-	else if (read_value > 0x100)
+	else if (read_value > 0xC0)
 		ctrl->value = ISO_100;
 	else
 		ctrl->value = ISO_50;
@@ -1987,6 +2861,35 @@ static int s5k4ecgx_get_iso(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 static int s5k4ecgx_get_shutterspeed(struct v4l2_subdev *sd,
 	struct v4l2_control *ctrl)
 {
+	int err;
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct s5k4ecgx_state *state =
+		container_of(sd, struct s5k4ecgx_state, sd);
+	u16 read_value_1;
+	u16 read_value_2;
+	u32 read_value;
+
+	err = s5k4ecgx_set_from_table(sd, "get shutterspeed",
+				&state->regs->get_shutterspeed, 1, 0);
+	err |= s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value_1);
+	err |= s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value_2);
+
+	read_value = (read_value_2 << 16) | (read_value_1 & 0xffff);
+	/* restore write mode */
+	s5k4ecgx_i2c_write_twobyte(client, 0x0028, 0x7000);
+
+#if 1
+	ctrl->value = read_value * 100 / 400;
+#else
+	ctrl->value = read_value / 400;
+#endif
+
+	dev_dbg(&client->dev,
+			"%s: get shutterspeed == %d\n", __func__, ctrl->value);
+
+	return err;
+
+#if 0
 	int err;
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct s5k4ecgx_state *state =
@@ -2005,6 +2908,7 @@ static int s5k4ecgx_get_shutterspeed(struct v4l2_subdev *sd,
 			"%s: get shutterspeed == %d\n", __func__, ctrl->value);
 
 	return err;
+#endif
 }
 
 static int s5k4ecgx_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
@@ -2015,12 +2919,6 @@ static int s5k4ecgx_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	struct sec_cam_parm *parms =
 		(struct sec_cam_parm *)&state->strm.parm.raw_data;
 	int err = 0;
-
-	if (!state->initialized) {
-		dev_err(&client->dev,
-			"%s: return error because uninitialized\n", __func__);
-		return -ENODEV;
-	}
 
 	mutex_lock(&state->ctrl_lock);
 
@@ -2063,6 +2961,11 @@ static int s5k4ecgx_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_CAMERA_AUTO_FOCUS_RESULT:
 		err = s5k4ecgx_get_auto_focus_result(sd, ctrl);
+#ifdef NEW_CAMERA
+		if(state->touch_ae_af_state == 1){
+			s5k4ecgx_touch_auto_focus(sd,2); /* Touch AE stop */	
+		}
+#endif
 		break;
 	case V4L2_CID_CAM_DATE_INFO_YEAR:
 		ctrl->value = 2010;
@@ -2100,11 +3003,15 @@ static int s5k4ecgx_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	case V4L2_CID_CAMERA_GET_FLASH_ONOFF:
 		ctrl->value = state->flash_state_on_previous_capture;
 		break;
+
+	
 	case V4L2_CID_CAMERA_OBJ_TRACKING_STATUS:
 	case V4L2_CID_CAMERA_SMART_AUTO_STATUS:
 		break;
 	default:
-		err = -ENOIOCTLCMD;
+//		err = -ENOIOCTLCMD;
+		err = 0;
+
 		dev_err(&client->dev, "%s: unknown ctrl id 0x%x\n",
 			__func__, ctrl->id);
 		break;
@@ -2125,15 +3032,12 @@ static int s5k4ecgx_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	int err = 0;
 	int value = ctrl->value;
 
-	if (!state->initialized &&
-		(ctrl->id != V4L2_CID_CAMERA_CHECK_DATALINE)) {
-		dev_err(&client->dev,
-			"%s: return error because uninitialized\n", __func__);
-		return -ENODEV;
-	}
-
 	dev_dbg(&client->dev, "%s: V4l2 control ID =%d, val = %d\n",
 		__func__, ctrl->id - V4L2_CID_PRIVATE_BASE, value);
+
+	/* No device or damaged device */
+	if( state->runmode == S5K4ECGX_RUNMODE_ERROR )
+		return -ENODEV;
 
 	mutex_lock(&state->ctrl_lock);
 
@@ -2141,114 +3045,104 @@ static int s5k4ecgx_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	case V4L2_CID_CAMERA_FLASH_MODE:
 		err = s5k4ecgx_set_flash_mode(sd, value);
 		break;
+        
 	case V4L2_CID_CAMERA_BRIGHTNESS:
-		if (state->runmode == S5K4ECGX_RUNMODE_RUNNING) {
-			err = s5k4ecgx_set_parameter(sd, &parms->brightness,
-						value, "brightness",
-						state->regs->ev,
-						ARRAY_SIZE(state->regs->ev));
-		} else {
-			dev_err(&client->dev,
-				"%s: trying to set brightness when not "
-				"in preview mode\n",
-				__func__);
-			err = -EINVAL;
-		}
+		err = s5k4ecgx_set_parameter(sd, &parms->brightness,
+					value, "brightness",
+					state->regs->ev,
+					ARRAY_SIZE(state->regs->ev));
 		break;
+        
 	case V4L2_CID_CAMERA_WHITE_BALANCE:
-		if (state->runmode == S5K4ECGX_RUNMODE_RUNNING) {
-			err = s5k4ecgx_set_parameter(sd, &parms->white_balance,
-					value, "white balance",
-					state->regs->white_balance,
-					ARRAY_SIZE(state->regs->white_balance));
-		} else {
-			dev_err(&client->dev,
-				"%s: trying to set white balance when not "
-				"in preview mode\n",
-				__func__);
-			err = -EINVAL;
+#ifdef NEW_CAMERA
+		if( value == WHITE_BALANCE_AUTO )
+		{
+			s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(sd,3,1);
 		}
+		else
+		{
+			s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(sd,3,0);
+		}
+#endif
+		err = s5k4ecgx_set_parameter(sd, &parms->white_balance,
+				value, "white balance",
+				state->regs->white_balance,
+				ARRAY_SIZE(state->regs->white_balance));
 		break;
+        
 	case V4L2_CID_CAMERA_EFFECT:
-		if (state->runmode == S5K4ECGX_RUNMODE_RUNNING) {
-			err = s5k4ecgx_set_parameter(sd, &parms->effects,
-					value, "effects", state->regs->effect,
-					ARRAY_SIZE(state->regs->effect));
-		} else {
-			dev_err(&client->dev,
-				"%s: trying to set effect when not "
-				"in preview mode\n",
-				__func__);
-			err = -EINVAL;
-		}
+		err = s5k4ecgx_set_parameter(sd, &parms->effects,
+				value, "effects", state->regs->effect,
+				ARRAY_SIZE(state->regs->effect));
 		break;
+        
 	case V4L2_CID_CAMERA_ISO:
-		if (state->runmode == S5K4ECGX_RUNMODE_RUNNING) {
-			err = s5k4ecgx_set_parameter(sd, &parms->iso,
-						value, "iso",
-						state->regs->iso,
-						ARRAY_SIZE(state->regs->iso));
-		} else {
-			dev_err(&client->dev,
-				"%s: trying to set iso when not "
-				"in preview mode\n",
-				__func__);
-			err = -EINVAL;
+#ifdef	NEW_CAMERA
+		if( value == ISO_AUTO)
+		{
+			s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(sd,5,1);
 		}
+		else
+		{
+			s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(sd,5,0);
+		}
+#endif
+		err = s5k4ecgx_set_parameter(sd, &parms->iso,
+					value, "iso",
+					state->regs->iso,
+					ARRAY_SIZE(state->regs->iso));
 		break;
+        
 	case V4L2_CID_CAMERA_METERING:
-		if (state->runmode == S5K4ECGX_RUNMODE_RUNNING) {
-			err = s5k4ecgx_set_parameter(sd, &parms->metering,
-					value, "metering",
-					state->regs->metering,
-					ARRAY_SIZE(state->regs->metering));
-		} else {
-			dev_err(&client->dev,
-				"%s: trying to set metering when not "
-				"in preview mode\n",
-				__func__);
-			err = -EINVAL;
-		}
+		err = s5k4ecgx_set_parameter(sd, &parms->metering,
+				value, "metering",
+				state->regs->metering,
+				ARRAY_SIZE(state->regs->metering));
 		break;
+        
 	case V4L2_CID_CAMERA_CONTRAST:
 		err = s5k4ecgx_set_parameter(sd, &parms->contrast,
 					value, "contrast",
 					state->regs->contrast,
 					ARRAY_SIZE(state->regs->contrast));
 		break;
+        
 	case V4L2_CID_CAMERA_SATURATION:
 		err = s5k4ecgx_set_parameter(sd, &parms->saturation,
 					value, "saturation",
 					state->regs->saturation,
 					ARRAY_SIZE(state->regs->saturation));
 		break;
+        
 	case V4L2_CID_CAMERA_SHARPNESS:
 		err = s5k4ecgx_set_parameter(sd, &parms->sharpness,
 					value, "sharpness",
 					state->regs->sharpness,
 					ARRAY_SIZE(state->regs->sharpness));
 		break;
+        
 	case V4L2_CID_CAMERA_WDR:
+#ifndef NEW_CAMERA
 		err = s5k4ecgx_set_wdr(sd, value);
+#else
+		/* WDR not supported */
+#endif
 		break;
+
 	case V4L2_CID_CAMERA_FACE_DETECTION:
-		err = s5k4ecgx_set_face_detection(sd, value);
+		//err = s5k4ecgx_set_face_detection(sd, value);
+		err = 0;
 		break;
+        
 	case V4L2_CID_CAMERA_FOCUS_MODE:
 		err = s5k4ecgx_set_focus_mode(sd, value);
 		break;
+        
 	case V4L2_CID_CAM_JPEG_QUALITY:
-		if (state->runmode == S5K4ECGX_RUNMODE_RUNNING) {
-			state->jpeg.quality = value;
-			err = s5k4ecgx_set_jpeg_quality(sd);
-		} else {
-			dev_err(&client->dev,
-				"%s: trying to set jpeg quality when not "
-				"in preview mode\n",
-				__func__);
-			err = -EINVAL;
-		}
+		state->jpeg.quality = value;
+		err = s5k4ecgx_set_jpeg_quality(sd);
 		break;
+        
 	case V4L2_CID_CAMERA_SCENE_MODE:
 		err = s5k4ecgx_set_parameter(sd, &parms->scene_mode,
 					SCENE_MODE_NONE, "scene_mode",
@@ -2260,6 +3154,15 @@ static int s5k4ecgx_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 				__func__);
 			break;
 		}
+
+		// set portrait -> candleLight -> none  change issue fix
+		// refrence from Cooper driver
+		if( value == SCENE_MODE_CANDLE_LIGHT || value == SCENE_MODE_DUSK_DAWN|| value == SCENE_MODE_SUNSET )
+			s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(sd,3,0);
+		else if( value == SCENE_MODE_PARTY_INDOOR||value == SCENE_MODE_BEACH_SNOW)
+			s5k4ecgx_set_REG_TC_DBG_AutoAlgEnBits(sd,5,0);
+
+
 		if (value != SCENE_MODE_NONE) {
 			err = s5k4ecgx_set_parameter(sd, &parms->scene_mode,
 					value, "scene_mode",
@@ -2274,33 +3177,58 @@ static int s5k4ecgx_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 				NORMAL_MODE_MAX_ONE_FRAME_DELAY_MS;
 		}
 
+
 		break;
+        
 	case V4L2_CID_CAMERA_GPS_LATITUDE:
 		dev_err(&client->dev,
 			"%s: V4L2_CID_CAMERA_GPS_LATITUDE: not implemented\n",
 			__func__);
 		break;
+        
 	case V4L2_CID_CAMERA_GPS_LONGITUDE:
 		dev_err(&client->dev,
 			"%s: V4L2_CID_CAMERA_GPS_LONGITUDE: not implemented\n",
 			__func__);
 		break;
+        
 	case V4L2_CID_CAMERA_GPS_TIMESTAMP:
 		dev_err(&client->dev,
 			"%s: V4L2_CID_CAMERA_GPS_TIMESTAMP: not implemented\n",
 			__func__);
 		break;
+        
 	case V4L2_CID_CAMERA_GPS_ALTITUDE:
 		dev_err(&client->dev,
 			"%s: V4L2_CID_CAMERA_GPS_ALTITUDE: not implemented\n",
 			__func__);
 		break;
+        
 	case V4L2_CID_CAMERA_OBJECT_POSITION_X:
 		state->position.x = value;
 		break;
+        
 	case V4L2_CID_CAMERA_OBJECT_POSITION_Y:
 		state->position.y = value;
 		break;
+        
+	case V4L2_CID_CAMERA_TOUCH_AF_START_STOP:
+#ifdef NEW_CAMERA
+		if( value == 0 ){ /* AF stop */ 	
+			s5k4ecgx_set_from_table(sd, "ae unlock",
+					&state->regs->ae_unlock, 1, 0);
+			if( parms->white_balance == WHITE_BALANCE_AUTO ){ 
+				s5k4ecgx_set_from_table(sd, "awb unlock",
+						&state->regs->awb_unlock, 1, 0);
+			}
+			s5k4ecgx_touch_auto_focus(sd,2); /* AE stop */
+		}
+		else /* AF start */
+			s5k4ecgx_touch_auto_focus(sd,3); /* AE start */
+#endif
+		s5k4ecgx_touch_auto_focus(sd,value);
+		break;
+        
 	case V4L2_CID_CAMERA_SET_AUTO_FOCUS:
 		if (value == AUTO_FOCUS_ON)
 			err = s5k4ecgx_start_auto_focus(sd);
@@ -2313,15 +3241,14 @@ static int s5k4ecgx_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 				__func__, value);
 		}
 		break;
+        
 	case V4L2_CID_CAMERA_FRAME_RATE:
 		dev_dbg(&client->dev,
 			"%s: camera frame rate request for %d fps\n",
 			__func__, value);
-		err = s5k4ecgx_set_parameter(sd, &parms->fps,
-					value, "fps",
-					state->regs->fps,
-					ARRAY_SIZE(state->regs->fps));
+		state->strm.parm.capture.timeperframe.denominator = value;
 		break;
+        
 	case V4L2_CID_CAM_CAPTURE:
 		err = s5k4ecgx_start_capture(sd);
 		break;
@@ -2336,18 +3263,44 @@ static int s5k4ecgx_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		else
 			err = s5k4ecgx_set_preview_stop(sd);
 		break;
+        
 	case V4L2_CID_CAMERA_CHECK_DATALINE:
 		dev_dbg(&client->dev, "%s: check_dataline set to %d\n",
 			__func__, value);
 		state->check_dataline = value;
 		break;
+        
 	case V4L2_CID_CAMERA_CHECK_DATALINE_STOP:
 		err = s5k4ecgx_check_dataline_stop(sd);
 		break;
+        
+	case V4L2_CID_CAMERA_ZOOM: /* It is not supported */
+		err = 0;
+		break;
+        
+	case V4L2_CID_CAMERA_VT_MODE:
+#ifdef 		NEW_CAMERA
+		state->vt_mode = value;
+	//	printk("[%s:%d] V4L2_CID_CAMERA_VT_MODE, state->vt_mode %d\n", __func__,__LINE__,state->vt_mode);
+#endif
+		err = 0;
+		break;
+        
+	case V4L2_CID_CAMERA_SENSOR_MODE:
+#ifdef NEW_CAMERA
+	//	printk("[%s:%d] Camera sensor mode is %d\n", __func__, __LINE__, value);
+		if(value == 1)
+			camcorder_check_flag = value;
+		else
+			camcorder_check_flag = value;
+#endif
+		err = 0;
+		break;
+        
 	default:
 		dev_err(&client->dev, "%s: unknown set ctrl id 0x%x\n",
-			__func__, ctrl->id);
-		err = -ENOIOCTLCMD;
+			__func__, ctrl->id - V4L2_CID_PRIVATE_BASE);
+		err = 0;
 		break;
 	}
 
@@ -2404,7 +3357,9 @@ static int s5k4ecgx_s_ext_ctrl(struct v4l2_subdev *sd,
 	default:
 		dev_err(&client->dev, "%s: unknown ctrl->id %d\n",
 			__func__, ctrl->id);
-		err = -ENOIOCTLCMD;
+//		err = -ENOIOCTLCMD;
+		err = 0;
+
 		break;
 	}
 
@@ -2419,7 +3374,7 @@ static int s5k4ecgx_s_ext_ctrls(struct v4l2_subdev *sd,
 				struct v4l2_ext_controls *ctrls)
 {
 	struct v4l2_ext_control *ctrl = ctrls->controls;
-	int ret;
+	int ret = 0;
 	int i;
 
 	for (i = 0; i < ctrls->count; i++, ctrl++) {
@@ -2638,15 +3593,8 @@ static int s5k4ecgx_init_regs(struct v4l2_subdev *sd)
 		container_of(sd, struct s5k4ecgx_state, sd);
 	u16 read_value;
 
-	/* we'd prefer to do this in probe, but the framework hasn't
-	 * turned on the camera yet so our i2c operations would fail
-	 * if we tried to do it in probe, so we have to do it here
-	 * and keep track if we succeeded or not.
-	 */
-
 	/* enter read mode */
 	s5k4ecgx_i2c_write_twobyte(client, 0x002C, 0x7000);
-
 	s5k4ecgx_i2c_write_twobyte(client, 0x002E, 0x01A6);
 	s5k4ecgx_i2c_read_twobyte(client, 0x0F12, &read_value);
 
@@ -2658,7 +3606,6 @@ static int s5k4ecgx_init_regs(struct v4l2_subdev *sd)
 #ifdef CONFIG_VIDEO_S5K4ECGX_V_1_0
 	if (read_value == S5K4ECGX_VERSION_1_0) {
 		state->regs = &regs_for_fw_version_1_0;
-		state->initialized = true;
 		return 0;
 	}
 #endif
@@ -2666,15 +3613,20 @@ static int s5k4ecgx_init_regs(struct v4l2_subdev *sd)
 	if (read_value == S5K4ECGX_VERSION_1_1) {
 		state->fw.minor = 1;
 		state->regs = &regs_for_fw_version_1_1;
-		state->initialized = true;
+
 		return 0;
 	}
+	else
+		state->runmode = S5K4ECGX_RUNMODE_ERROR;
 #endif
 
 	dev_err(&client->dev, "%s: unknown fw version 0x%x\n",
 		__func__, read_value);
 	return -ENODEV;
 }
+
+/* venturi add by park dong yun for issue camera status to audio driver */
+//extern void mc1n2_voip_set_camera_status(int status);
 
 static int s5k4ecgx_init(struct v4l2_subdev *sd, u32 val)
 {
@@ -2689,31 +3641,74 @@ static int s5k4ecgx_init(struct v4l2_subdev *sd, u32 val)
 	if (s5k4ecgx_init_regs(&state->sd) < 0)
 		return -ENODEV;
 
+#ifdef CONFIG_LOAD_FILE
+	if (s5k4ecgx_regs_table_init(state->fw.minor)) {
+		printk( "%s: config file read fail\n",
+				__func__);
+		return -EIO;
+	}
+	msleep(100);
+#endif		
+
 	dev_dbg(&client->dev, "%s: state->check_dataline : %d\n",
 		__func__, state->check_dataline);
 
+#ifdef	NEW_CAMERA
+	if(state->vt_mode == 1){  /* For Qik */
+//		printk("[%s:%d] init_reg1_Qik\n", __func__, __LINE__);
+		if(s5k4ecgx_set_from_table(sd, "init reg 1 Qik",
+				&state->regs->init_reg_1_qik, 1, 0) < 0)
+			return -EIO;
+	}
+	else 
+#endif
+	{
 	if (s5k4ecgx_set_from_table(sd, "init reg 1",
 					&state->regs->init_reg_1, 1, 0) < 0)
 		return -EIO;
-
+	}
 	/* delay 10ms after wakeup of SOC processor */
 	msleep(10);
 
+#ifdef CONFIG_LOAD_FILE
+	if (s5k4ecgx_set_from_table(sd, "init reg 2",
+					&state->regs->init_reg_2, 1, 0) < 0)
+		return -EIO;	
+#else
+
+#ifdef	NEW_CAMERA
+	if(state->vt_mode == 1){  /* For Qik */
+		printk("[%s:%d] init_reg2_Qik\n", __func__, __LINE__);
+		if(s5k4ecgx_set_from_table(sd, "init reg 2 Qik",
+				&state->regs->init_reg_2_qik, 1, 0) < 0)
+			return -EIO;
+	}
+	else 
+#endif
+	{
 	if (s5k4ecgx_write_init_reg2_burst(sd) < 0)
 		return -EIO;
+	}
+#endif
 
+#ifdef	NEW_CAMERA
+	if(state->vt_mode == 1){  /* For Qik */
+//		printk("[%s:%d] flash init\n", __func__, __LINE__);
+		/* We don't have to do anyting */
+	}
+	else 
+#endif
+	{
 	if (s5k4ecgx_set_from_table(sd, "flash init",
 				&state->regs->flash_init, 1, 0) < 0)
 		return -EIO;
-
-	if (state->check_dataline) {
-		if (s5k4ecgx_set_from_table(sd, "dtp start",
-					&state->regs->dtp_start, 1, 0) < 0)
-			return -EIO;
 	}
 
 	dev_dbg(&client->dev, "%s: end\n", __func__);
 
+     /* add by park dong yun for venturi set flag  for voip */
+//     mc1n2_voip_set_camera_status(1);
+     
 	return 0;
 }
 
@@ -2825,6 +3820,9 @@ static int s5k4ecgx_remove(struct i2c_client *client)
 
 	dev_dbg(&client->dev, "Unloaded camera sensor S5K4ECGX.\n");
 
+     /* add by park dong yun for venturi set flag  for voip */
+//     mc1n2_voip_set_camera_status(0);
+     
 	return 0;
 }
 

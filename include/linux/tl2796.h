@@ -13,7 +13,9 @@
 
 struct s5p_panel_data {
 	const u16 *seq_display_set;
+	const u16 *seq_panel_set;
 	const u16 *seq_etc_set;
+	const u16 *gamma180;
 	const u16 *display_on;
 	const u16 *display_off;
 	const u16 *standby_on;

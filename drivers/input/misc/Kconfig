@@ -12,35 +12,6 @@ menuconfig INPUT_MISC
 
 if INPUT_MISC
 
-config INPUT_ACCEL_KR3DH
-        tristate "KR3DH driver for s5pc11x"
-        default n
-        help
-          This option enables acceleration sensor using KR3DH driver
-
-config INPUT_KR3DH_POSITION
-        int "KR3DH Mounting Position on Board"
-        depends on INPUT_ACCEL_KR3DH
-        default "0"
-        help
-          Chip mounting position (pin 1).
-            0: top, upper-left
-            1: top, upper-right
-            2: top, lower-right
-            3: top, lower-left
-            4: bottom, upper-left
-            5: bottom, upper-right
-            6: bottom, lower-right
-            7: bottom, lower-left
-
-	
-config INPUT_GYRO_K3G
-        tristate "K3G driver for s5pc11x"
-        default n
-        help
-          This option enables gyro sensors using K3G driver
-
-
 config INPUT_88PM860X_ONKEY
 	tristate "88PM860x ONKEY support"
 	depends on MFD_88PM860X
@@ -84,21 +55,13 @@ config INPUT_AD714X_SPI
 config INPUT_BMA023
 	tristate "Bosch Sensortec BMA023 Acceleration Sensor"
 	depends on I2C
-
-config INPUT_BMA023_POSITION
-	int "BMA023 Mounting Position on Board"
-	depends on INPUT_BMA023
-	default "0"
+	  
+config INPUT_K3DH
+	tristate "STMicro K3DH Acceleration Sensor"
+	depends on I2C
+	default n
 	help
-	  Chip mounting position (pin 1).
-	    0: top, upper-left
-	    1: top, upper-right
-	    2: top, lower-right
-	    3: top, lower-left
-	    4: bottom, upper-left
-	    5: bottom, upper-right
-	    6: bottom, lower-right
-	    7: bottom, lower-left
+	  Driver for STMicro K3DH accelerometer - digital motion sensor.
 
 config INPUT_YAS529
 	tristate "Yamaha YAS529 Geomagnetic Sensor"
@@ -122,6 +85,12 @@ config INPUT_YAS529_POSITION
 config INPUT_ORIENTATION
 	tristate "Yamaha Orientation Sensor"
 	depends on I2C
+
+config GYRO_K3G
+	tristate "Gyroscope driver"
+	default n
+	help
+	  This option enables gyro sensors using K3G driver.
 
 config INPUT_PCSPKR
 	tristate "PC Speaker support"

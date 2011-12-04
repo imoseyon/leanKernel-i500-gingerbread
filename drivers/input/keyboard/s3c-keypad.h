@@ -17,21 +17,94 @@
 static void __iomem *key_base;
 
 
+#if defined (CONFIG_MACH_S5PC110_P1P2)
 
-   #define KEYPAD_COLUMNS       6
- #define KEYPAD_ROWS    10
- #define MAX_KEYPAD_NR  60
+#define KEYPAD_COLUMNS	14	
+#define KEYPAD_ROWS	8
+#define MAX_KEYPAD_NR	112
+#err_1
 
 
+#elif defined (CONFIG_MACH_S5PC110_ARIES) || defined (CONFIG_MACH_STEALTHV)|| defined (CONFIG_MACH_AEGIS) || defined(CONFIG_MARCH_VIPER)
 
+ #define KEYPAD_COLUMNS       2
+ #define KEYPAD_ROWS    4
+ #define MAX_KEYPAD_NR  8
+#elif defined(CONFIG_MACH_CHIEF)
+ #define KEYPAD_COLUMNS      8
+ #define KEYPAD_ROWS         1 // 7-> 1 for chief
+ // TODO:FORTE_RECHECK!! POWER_KEY 56
+ #define MAX_KEYPAD_NR       9 // 58 -> 9 for chief // 59 -> 58 : 18 key LCD update lock
 
+//#err_2 xxxxx
+
+#elif defined (CONFIG_MACH_SMDKC110 ) || defined (CONFIG_MACH_S5PC110_P1)
+
+#define KEYPAD_COLUMNS	8
+#define KEYPAD_ROWS	8
+#define MAX_KEYPAD_NR	64	/* 8*8 */
+#err_3
+
+#endif
+
+/* #define DEBUG_LOG_ENABLE */
 
 #ifdef CONFIG_ANDROID
+#ifdef CONFIG_MACH_CHIEF
+#define L_MENU       139
+#define L_HOME       102
+#define L_SEARCH     217
+#define L_BACK       158
+
+#define L_FOCUS      211
+#define L_CAMERA     212
+#define L_VOL_UP     115
+#define L_VOL_DOWN   114
+
+#define L_POWER      116
+#endif
 int keypad_keycode[] = {
 
-1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
-21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
-41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+#if defined (CONFIG_MACH_S5PC110_P1P2)
+		0,  15,  399,   2,  16,  30,   0,   0,     //7
+		0,   0,    0,   0,   0,   0, 100,  56,	  	//15			
+		0,   0,   58,   4,  18,  32,  46,  57,	        //23			
+		0,   0,    1,   3,  17,  31,  45,  44,	        //31			
+		0,   0,    0,   0,   0,   0,   0,   0,	        //39			
+		34,  20,   6,   5,  19,  33,  47,  48,	        //47			
+		35,  21,   7,   8,  22,  36,  50,  49,          //55				
+		56,   0,   0,  10,  24,  38,  52, 108,         //63			
+		0,    0,   0,   0,  54,  42,   0,   0,	        //71			
+		105,  0,   0,   9,  23,  37,  51,   0,	        //79			
+		0,   97,  29,   0,   0,   0,   0,   0,	        //87			
+		0,    0,   0, 150,  0,    0,   0,   0,	        //95			
+		12,  106, 11,  25,  26,  39,  53, 103,      //103				
+		14,  106,  3,  14,  27,  43,  40,  28,      //111		
+
+#err_4
+#elif defined (CONFIG_MACH_CHIEF) // TODO:CHIEF
+          L_VOL_UP, L_MENU, L_CAMERA, L_FOCUS, L_HOME, L_BACK, L_SEARCH, L_VOL_DOWN, L_POWER,
+
+#elif defined (CONFIG_MACH_S5PC110_ARIES)
+        57,34,50,49,0,58,57,3
+//#err_5 xxxxx
+
+#elif defined (CONFIG_MACH_STEALTHV)
+		/* use input.h and /androi/device/samsung/PROJECTNAME/qwerty.kl*/
+		0,	KEY_BACK,		KEY_HOME,		KEY_MENU,
+		0,	KEY_VOLUMEDOWN,	KEY_SEARCH,		0
+
+#elif defined (CONFIG_MACH_SMDKC110)
+		1,2,3,4,5,6,7,8,
+		9,10,11,12,13,14,15,16,
+		17,18,19,20,21,22,23,24,
+		25,26,27,28,29,30,31,32,
+		33,34,35,36,37,38,39,40,
+		41,42,43,44,45,46,47,48,
+		49,50,51,52,53,54,55,56,
+		57,58,59,60,61,62,63,64
+
+#endif
 };
 
 #else
@@ -45,6 +118,8 @@ int keypad_keycode[] = {
 		KEY_M, KEY_L, KEY_7, KEY_U, KEY_J, KEY_N, 55, KEY_ENTER,
 		KEY_LEFTSHIFT, KEY_9, KEY_8, KEY_I, KEY_K, KEY_B, 63, KEY_COMMA
 	};
+#err_6
+
 #endif
 
 #if CONFIG_ANDROID
@@ -58,11 +133,13 @@ int keypad_keycode[] = {
 #define KEYPAD_ROW_GPIOPUD      S5PC1XX_GPH3PUD
 #define KEYPAD_COL_GPIOCON      S5PC1XX_GPH2CON
 #define KEYPAD_COL_GPIOPUD      S5PC1XX_GPH2PUD
-#elif defined( CONFIG_CPU_S5PC110 ) || defined (CONFIG_CPU_S5PV210 )
-#define KEYPAD_ROW_GPIOCON      S5PV210_GPH3CON
-#define KEYPAD_ROW_GPIOPUD      S5PV210_GPH3PUD
-#define KEYPAD_COL_GPIOCON      S5PV210_GPH2CON
-#define KEYPAD_COL_GPIOPUD      S5PV210_GPH2PUD
+#elif /*defined( CONFIG_CPU_S5PC110 ) || */defined (CONFIG_CPU_S5PV210 )
+//#err_7 xxxxx
+
+#define KEYPAD_ROW_GPIOCON      (S5PV210_GPH3_BASE + 0x00)	//S5PV210_GPH3CON
+#define KEYPAD_ROW_GPIOPUD      (S5PV210_GPH3_BASE + 0x08)	//S5PV210_GPH3PUD
+#define KEYPAD_COL_GPIOCON      (S5PV210_GPH2_BASE + 0x00)	//S5PV210_GPH2CON
+#define KEYPAD_COL_GPIOPUD      (S5PV210_GPH2_BASE + 0x08)	//S5PV210_GPH2PUD
 #endif
 #endif /* CONFIG_ANDROID */
 
@@ -78,25 +155,43 @@ int keypad_keycode[] = {
 
 #define KEYCODE_UNKNOWN 10 
 
+enum
+{
+	KEYGPIO_VOLUME_UP = 0,
+	KEYGPIO_POWER,
+	KEYGPIO_MAX,
+};
+
+typedef struct _keygpio_info {
+	int irq;
+	int gpio;
+	int gpio_data;
+	int gpio_data_mask;
+
+	int keycode;
+	int prev_key_status;
+} KEYGPIO_INFO;
+
+typedef struct _keygpio_int_info {
+	int					index;
+	KEYGPIO_INFO *		info;
+	struct input_dev *	dev;
+} KEYGPIO_INT_INFO;
+
 struct s3c_keypad {
 	struct input_dev *dev;
 	int nr_rows;	
 	int no_cols;
 	int total_keys; 
 	int keycodes[MAX_KEYPAD_NR];
+
+	struct timer_list	keypad_timer;
+	unsigned int		keypad_timer_on;	
+
+	/* for gpio keys */
+	KEYGPIO_INFO		keygpio_info_tbl[KEYGPIO_MAX];
+	KEYGPIO_INT_INFO	keygpio_int_info_tbl[KEYGPIO_MAX];
 };
-
-#ifdef CONFIG_KERNEL_DEBUG_SEC
-
-/*
- *   OK   : 0
- *   DOWN : 4
- *   UP   : 5
- */
-#define KEY_ONE 0       /*OK KEY*/
-#define KEY_TWO	5       /*UP KEY*/
-#endif 
-
 
 extern void s3c_setup_keypad_cfg_gpio(int rows, int columns);
 

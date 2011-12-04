@@ -989,7 +989,7 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 #ifdef CONFIG_SND_S5P_RP
         if (!s5p_rp_is_running)
 #endif            
-	dapm_seq_run(codec, &down_list, event, dapm_down_seq);
+                dapm_seq_run(codec, &down_list, event, dapm_down_seq);
 
 	/* Now power up. */
 	dapm_seq_run(codec, &up_list, event, dapm_up_seq);

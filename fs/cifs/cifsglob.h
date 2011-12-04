@@ -19,7 +19,7 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/slab.h>
-#include <linux/workqueue.h>
+#include <linux/slow-work.h>
 #include "cifs_fs_sb.h"
 #include "cifsacl.h"
 /*
@@ -363,7 +363,7 @@ struct cifsFileInfo {
 	atomic_t count;		/* reference count */
 	struct mutex fh_mutex; /* prevents reopen race after dead ses*/
 	struct cifs_search_info srch_inf;
-	struct work_struct oplock_break; /* work for oplock breaks */
+	struct slow_work oplock_break; /* slow_work job for oplock breaks */
 };
 
 /* Take a reference on the file private data */
@@ -732,6 +732,4 @@ GLOBAL_EXTERN unsigned int cifs_min_rcv;    /* min size of big ntwrk buf pool */
 GLOBAL_EXTERN unsigned int cifs_min_small;  /* min size of small buf pool */
 GLOBAL_EXTERN unsigned int cifs_max_pending; /* MAX requests at once to server*/
 
-void cifs_oplock_break(struct work_struct *work);
-void cifs_oplock_break_get(struct cifsFileInfo *cfile);
-void cifs_oplock_break_put(struct cifsFileInfo *cfile);
+extern const struct slow_work_ops cifs_oplock_break_ops;

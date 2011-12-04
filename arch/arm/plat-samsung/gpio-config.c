@@ -21,49 +21,6 @@
 #include <plat/gpio-cfg.h>
 #include <plat/gpio-cfg-helpers.h>
 
-
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-int s3c_gpio_int_flt_s5pc1xx(struct s3c_gpio_chip *chip,
-                                 unsigned int off, unsigned int cfg)
-{
-        void __iomem *reg = chip->base;
-        unsigned int shift = (off & 7) * 4;
-        u32 con;
-
-        if (s3c_gpio_is_cfg_special(cfg)) {
-                cfg &= 0xf;
-                cfg <<= shift;
-        }
-        reg=reg+0x848;
-
-        con = 0x8000;
-
-        __raw_writel(con, reg);
-
-        return 0;
-}
-
-int s3c_gpio_int_flt(unsigned int pin, unsigned int config)
-{
-        struct s3c_gpio_chip *chip = s3c_gpiolib_getchip(pin);
-        unsigned long flags;
-        int offset;
-        int ret;
-
-        if (!chip)
-                return -EINVAL;
-
-        offset = pin - chip->chip.base;
-
-        local_irq_save(flags);
-        ret = s3c_gpio_int_flt_s5pc1xx(chip, offset, config);
-        local_irq_restore(flags);
-
-        return ret;
-}
-#endif
-
-
 int s3c_gpio_cfgpin(unsigned int pin, unsigned int config)
 {
 	struct s3c_gpio_chip *chip = s3c_gpiolib_getchip(pin);
@@ -323,20 +280,7 @@ s3c_gpio_pull_t s3c_gpio_getpull_1up(struct s3c_gpio_chip *chip,
 	return pup ? S3C_GPIO_PULL_NONE : S3C_GPIO_PULL_UP;
 }
 #endif /* CONFIG_S3C_GPIO_PULL_UP */
-#ifdef CONFIG_MACH_FORTE
-int s3c_gpio_setpin_updown(struct s3c_gpio_chip *chip,
-                           unsigned int off, s3c_gpio_pull_t level)
-{
-        void __iomem *reg = chip->base + 0x04;
-        u32 lvl;
 
-        lvl = __raw_readl(reg);
-        lvl &= ~(1 << off);
-        lvl |= (level << off);
-        __raw_writel(lvl, reg);
-        return 0;
-}
-#endif
 #ifdef CONFIG_S5P_GPIO_DRVSTR
 s5p_gpio_drvstr_t s5p_gpio_get_drvstr(unsigned int pin)
 {

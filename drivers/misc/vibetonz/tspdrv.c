@@ -37,13 +37,11 @@
 #include <linux/version.h>
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
-#include <linux/vibrator-pwm.h>
 #include <asm/uaccess.h>
 #include <linux/hrtimer.h>
 #include "../../staging/android/timed_output.h"
 #include <linux/delay.h>
-#include <linux/gpio.h>
-//#include <linux/wakelock.h>
+#include <linux/wakelock.h>
 
 #include "tspdrv.h"
 #include "ImmVibeSPI.c"
@@ -56,7 +54,7 @@ static char g_szDeviceName[  (VIBE_MAX_DEVICE_NAME_LENGTH
                             * NUM_ACTUATORS];       /* initialized in init_module */
 static size_t g_cchDeviceName;                      /* initialized in init_module */
 
-//static struct wake_lock vib_wake_lock;
+static struct wake_lock vib_wake_lock;
 
 /* Flag indicating whether the driver is in use */
 static char g_bIsPlaying = false;
@@ -81,14 +79,8 @@ static VibeInt8 g_nForceLog[FORCE_LOG_BUFFER_SIZE];
 #error Unsupported Kernel version
 #endif
 
-//#ifdef IMPLEMENT_AS_CHAR_DRIVER
-#if 0
-static int g_nMajor = 0;
-#endif
-
 /* Needs to be included after the global variables because it uses them */
 #include "VibeOSKernelLinuxTime.c"
-
 
 /* timed_output */
 #define VIBRATOR_PERIOD	87084/2
@@ -101,36 +93,31 @@ static int vibrator_value = 0;
 
 struct pwm_device	*vib_pwm;
 
-struct vibrator_platform_data vib_plat_data;
-
 static int set_vibetonz(int timeout)
 {
-        //gpio_request(GPIO_VIBTONE_EN1, "GPIO_VIBTONE_EN1");
+	if(!timeout) {
+		pwm_disable(Immvib_pwm);
+		printk("[VIBETONZ] DISABLE\n");
+		gpio_set_value(GPIO_VIBTONE_EN1, GPIO_LEVEL_LOW);
+		gpio_direction_input(GPIO_VIBTONE_EN1);
+		s3c_gpio_setpull(GPIO_VIBTONE_EN1,S3C_GPIO_PULL_DOWN);
+            	wake_unlock(&vib_wake_lock);
+	}
+	else {
+            	wake_lock(&vib_wake_lock);
+		pwm_config(Immvib_pwm, VIBRATOR_DUTY, VIBRATOR_PERIOD);
+		pwm_enable(Immvib_pwm);
+		
+		printk("[VIBETONZ] ENABLE\n");
+		gpio_direction_output(GPIO_VIBTONE_EN1, GPIO_LEVEL_LOW);
+		mdelay(1);
+		gpio_set_value(GPIO_VIBTONE_EN1, GPIO_LEVEL_HIGH);
+	}
 
-        if(!timeout) {
-                pwm_disable(Immvib_pwm);
-                printk("[VIBETONZ] DISABLE\n");
-                gpio_set_value(vib_plat_data.vib_enable_gpio, 0);
-                gpio_direction_input(vib_plat_data.vib_enable_gpio);
-                s3c_gpio_setpull(vib_plat_data.vib_enable_gpio,S3C_GPIO_PULL_DOWN);
-        }
-        else {
-                pwm_config(Immvib_pwm, VIBRATOR_DUTY, VIBRATOR_PERIOD);
-                pwm_enable(Immvib_pwm);
-
-                printk("[VIBETONZ] ENABLE\n");
-                gpio_direction_output(vib_plat_data.vib_enable_gpio, 0);
-                mdelay(1);
-                gpio_set_value(vib_plat_data.vib_enable_gpio, 1);
-        }
-
-        //gpio_free(GPIO_VIBTONE_EN1);
-
-        vibrator_value = timeout;
-
-        return 0;
+	vibrator_value = timeout;
+	
+	return 0;
 }
-
 
 static enum hrtimer_restart vibetonz_timer_func(struct hrtimer *timer)
 {
@@ -190,7 +177,7 @@ static void vibetonz_start(void)
 
 	ret = timed_output_dev_register(&timed_output_vt);
 	if(ret)
-		printk(KERN_ERR "[VIBETONZ] timed_output_dev_register is fail \n");
+		printk(KERN_ERR "[VIBETONZ] timed_output_dev_register is fail \n");	
 }
 
 
@@ -210,17 +197,36 @@ static struct file_operations fops =
     .release =  release
 };
 
-//#ifndef IMPLEMENT_AS_CHAR_DRIVER
 static struct miscdevice miscdev = 
 {
 	.minor =    MISC_DYNAMIC_MINOR,
 	.name =     MODULE_NAME,
 	.fops =     &fops
 };
-//#endif
 
 static int suspend(struct platform_device *pdev, pm_message_t state);
 static int resume(struct platform_device *pdev);
+static struct platform_driver platdrv = 
+{
+    .suspend =  suspend,	
+    .resume =   resume,	
+    .driver = 
+    {		
+        .name = MODULE_NAME,	
+    },	
+};
+
+static void platform_release(struct device *dev);
+static struct platform_device platdev = 
+{	
+	.name =     MODULE_NAME,	
+	.id =       -1,                     /* means that there is only one device */
+	.dev = 
+    {
+		.platform_data = NULL, 		
+		.release = platform_release,    /* a warning is thrown during rmmod if this is absent */
+	},
+};
 
 #ifdef VIBE_TUNING
 struct class *vibetonz_class;
@@ -232,72 +238,92 @@ EXPORT_SYMBOL(immTest_test);
 extern long int freq_count;
 static ssize_t immTest_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-        printk(KERN_INFO "[VIBETONZ] %s : operate nothing\n", __FUNCTION__);
+	printk(KERN_INFO "[VIBETONZ] %s : operate nothing\n", __FUNCTION__);
 
-        return 0;
+	return 0;
 }
 static ssize_t immTest_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
 {
-        char *after;
-        unsigned long arg1=0, arg2=0;
+	char *after;
+	unsigned long arg1=0, arg2=0;
 
-        unsigned long value = simple_strtoul(buf, &after, 10);
-//      arg1 = (int) (value / 1000);
-//      arg2 = (int) (value % 1000 );
-        printk(KERN_INFO "[VIBETONZ] value:%ld\n", value);
+	unsigned long value = simple_strtoul(buf, &after, 10);
+	printk(KERN_INFO "[VIBETONZ] value:%ld\n", value);
 
-        if (value > 0)
-                //ImmVibeSPI_ForceOut_AmpEnable(value);
-                ImmVibeSPI_ForceOut_Set(0, value);
-        else
-                ImmVibeSPI_ForceOut_AmpDisable(value);
+	if (value > 0) 
+		ImmVibeSPI_ForceOut_Set(0, value);
+	else 
+		ImmVibeSPI_ForceOut_AmpDisable(value);
 
-        //freq_count = value;
-
-        return size;
+	return size;
 }
-//static DEVICE_ATTR(immTest, S_IRUGO | S_IWUSR | S_IWOTH | S_IXOTH, immTest_show, immTest_store);
-static DEVICE_ATTR(immTest, S_IRUGO | S_IWUSR , immTest_show, immTest_store); //Fix CTS Fail 
+static DEVICE_ATTR(immTest, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH,
+		immTest_show, immTest_store);
 #endif /* VIBE_TUNING */
 
+/* Module info */
+MODULE_AUTHOR("Immersion Corporation");
+MODULE_DESCRIPTION("TouchSense Kernel Module");
+MODULE_LICENSE("GPL v2");
 
-static int vibrator_probe(struct platform_device *pdev)
+int init_module(void)
 {
-	struct vibrator_platform_data *pdata = pdev->dev.platform_data; 
-	int i, nRet=0;
+    int nRet, i;   /* initialized below */
 
-	vib_plat_data.timer_id = pdata->timer_id;
-	vib_plat_data.vib_enable_gpio = pdata->vib_enable_gpio;
+    DbgOut((KERN_INFO "tspdrv: init_module.\n"));
 
-	if (gpio_is_valid(vib_plat_data.vib_enable_gpio)) {
-		if (nRet = gpio_request(vib_plat_data.vib_enable_gpio, "GPIO_VIBTONE_EN1"))
-			printk(KERN_ERR "Failed to request GPIO_VIBTONE_EN1! %d \n",nRet);
+    nRet = misc_register(&miscdev);
+	printk("[VIBETONZ:WJYOO] MISC_REGISTER nRet = %d\n", nRet);
+	if (nRet) 
+    {
+        DbgOut((KERN_ERR "tspdrv: misc_register failed.\n"));
+		return nRet;
 	}
 
+	nRet = platform_device_register(&platdev);
+	if (nRet) 
+    {
+        DbgOut((KERN_ERR "tspdrv: platform_device_register failed.\n"));
+    }
 
-	ImmVibeSPI_ForceOut_Initialize();
-	VibeOSKernelLinuxInitTimer();
+	nRet = platform_driver_register(&platdrv);
+	if (nRet) 
+    {
+        DbgOut((KERN_ERR "tspdrv: platform_driver_register failed.\n"));
+    }
 
-	/* Get and concatenate device name and initialize data buffer */
-	g_cchDeviceName = 0;
-	for (i=0; i<NUM_ACTUATORS; i++)
-	{
-		char *szName = g_szDeviceName + g_cchDeviceName;
-		ImmVibeSPI_Device_GetName(i, szName, VIBE_MAX_DEVICE_NAME_LENGTH);
-
-		/* Append version information and get buffer length */
-		strcat(szName, VERSION_STR);
-		g_cchDeviceName += strlen(szName);
-
-		g_SamplesBuffer[i].nIndexPlayingBuffer = -1; /* Not playing */
-		g_SamplesBuffer[i].actuatorSamples[0].nBufferSize = 0;
-		g_SamplesBuffer[i].actuatorSamples[1].nBufferSize = 0;
+	if (gpio_is_valid(GPIO_VIBTONE_EN1)) {
+		if (gpio_request(GPIO_VIBTONE_EN1, "GPIO_VIBTONE_EN1"))
+			printk(KERN_ERR "Failed to request GPIO_VIBTONE_EN1! \n");
 	}
 
-	//wake_lock_init(&vib_wake_lock, WAKE_LOCK_SUSPEND, "vib_present");
+	if (gpio_is_valid(GPIO_VIBTONE_PWM)) {
+		if (gpio_request(GPIO_VIBTONE_PWM, "GPIO_VIBTONE_PWM"))
+			printk(KERN_ERR "Failed to request GPIO_VIBTONE_PWM! \n");
+	}
+
+    ImmVibeSPI_ForceOut_Initialize();
+    VibeOSKernelLinuxInitTimer();
+
+    /* Get and concatenate device name and initialize data buffer */
+    g_cchDeviceName = 0;
+    for (i=0; i<NUM_ACTUATORS; i++)
+    {
+        char *szName = g_szDeviceName + g_cchDeviceName;
+        ImmVibeSPI_Device_GetName(i, szName, VIBE_MAX_DEVICE_NAME_LENGTH);
+
+        /* Append version information and get buffer length */
+        strcat(szName, VERSION_STR);
+        g_cchDeviceName += strlen(szName);
+
+        g_SamplesBuffer[i].nIndexPlayingBuffer = -1; /* Not playing */
+        g_SamplesBuffer[i].actuatorSamples[0].nBufferSize = 0;
+        g_SamplesBuffer[i].actuatorSamples[1].nBufferSize = 0;
+    }
+    
+    wake_lock_init(&vib_wake_lock, WAKE_LOCK_SUSPEND, "vib_present");
 
 #ifdef VIBE_TUNING
-
 	// ---------- file creation at '/sys/class/vibetonz/immTest'------------------------------
 	vibetonz_class = class_create(THIS_MODULE, "vibetonz");
 	if (IS_ERR(vibetonz_class))
@@ -311,66 +337,9 @@ static int vibrator_probe(struct platform_device *pdev)
 		pr_err("Failed to create device file(%s)!\n", dev_attr_immTest.attr.name);
 #endif
 
-	vibetonz_start();
+    vibetonz_start();
 
-	return 0;
-}
-
-static int vibrator_remove(struct platform_device *pdev)
-{
-
-	DbgOut((KERN_INFO "tspdrv: vibrator removed .\n"));
-
-	return 0;
-}
-
-static struct platform_driver vibrator_driver = {
-	.probe 		= vibrator_probe,
-	.remove 	= vibrator_remove,
-	.suspend 	= suspend,
-	.resume 	= resume,
-	.driver 	= {
-		.name  = "cm4040_cs",
-		.owner = THIS_MODULE,
-	},
-};
-
-/* Module info */
-MODULE_AUTHOR("Immersion Corporation");
-MODULE_DESCRIPTION("TouchSense Kernel Module");
-MODULE_LICENSE("GPL v2");
-
-int init_module(void)
-{
-    int nRet, i;   /* initialized below */
-
-    DbgOut((KERN_INFO "tspdrv: init_module.\n"));
-
-//#ifdef IMPLEMENT_AS_CHAR_DRIVER
-#if 0
-    g_nMajor = register_chrdev(0, MODULE_NAME, &fops);
-    if (g_nMajor < 0) 
-    {
-        DbgOut((KERN_ERR "tspdrv: can't get major number.\n"));
-        return g_nMajor;
-    }
-#else
-    nRet = misc_register(&miscdev);
-	printk("[VIBETONZ:WJYOO] MISC_REGISTER nRet = %d\n", nRet);
-	if (nRet) 
-    {
-        DbgOut((KERN_ERR "tspdrv: misc_register failed.\n"));
-		return nRet;
-	}
-#endif
-
-	nRet = platform_driver_register(&vibrator_driver);
-	if (nRet) 
-    {
-        DbgOut((KERN_ERR "tspdrv: platform_driver_register failed.\n"));
-    }
-
-	return nRet;
+    return 0;
 }
 
 void cleanup_module(void)
@@ -380,15 +349,11 @@ void cleanup_module(void)
     VibeOSKernelLinuxTerminateTimer();
     ImmVibeSPI_ForceOut_Terminate();
 
-	platform_driver_unregister(&vibrator_driver);
+	platform_driver_unregister(&platdrv);
+	platform_device_unregister(&platdev);
 
-//#ifdef IMPLEMENT_AS_CHAR_DRIVER
-#if 0
-    unregister_chrdev(g_nMajor, MODULE_NAME);
-#else
     misc_deregister(&miscdev);
-    gpio_free(vib_plat_data.vib_enable_gpio);
-#endif
+    gpio_free(GPIO_VIBTONE_EN1);
 }
 
 static int open(struct inode *inode, struct file *file) 
@@ -611,13 +576,13 @@ static int ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsig
             break;
 
         case TSPDRV_ENABLE_AMP:
-            //wake_lock(&vib_wake_lock);
+            wake_lock(&vib_wake_lock);
             ImmVibeSPI_ForceOut_AmpEnable(arg);
             break;
 
         case TSPDRV_DISABLE_AMP:
             ImmVibeSPI_ForceOut_AmpDisable(arg);
-            //wake_unlock(&vib_wake_lock);
+            wake_unlock(&vib_wake_lock);
             break;
 
         case TSPDRV_GET_NUM_ACTUATORS:

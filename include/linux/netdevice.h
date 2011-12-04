@@ -778,7 +778,7 @@ struct net_device {
 	 * the interface.
 	 */
 	char			name[IFNAMSIZ];
-
+	char 		interface_iden[8];
 	struct pm_qos_request_list *pm_qos_req;
 
 	/* device name hash chain */

@@ -19,14 +19,13 @@
 #include <linux/miscdevice.h>
 #include <linux/clk.h>
 #include <linux/irq.h>
-//#include <linux/irqreturn.h>
-#include <linux/io.h>
 #include <linux/slab.h>
+
+#include <linux/io.h>
 #include <mach/hardware.h>
 #include <asm/delay.h>
 #include <asm/irq.h>
 
-#include <mach/gpio-bank.h>
 #include <mach/regs-gpio.h>
 #include <mach/gpio.h>
 #include <plat/gpio-cfg.h>
@@ -34,18 +33,17 @@
 #ifdef CONFIG_CPU_FREQ
 #include <mach/cpu-freq-v210.h>
 #endif
+
+#ifdef CONFIG_MACH_CHIEF
+#include <mach/gpio-bank.h>
+#endif
+
  
 #include "s3c-keypad.h"
 
-#if 1
-#ifdef CONFIG_KERNEL_DEBUG_SEC
-#include <linux/kernel_sec_common.h>
-#endif
-#endif
-
 #define USE_PERF_LEVEL_KEYPAD 1 
-#define DEBUG_LOG_ENABLE 0
 #undef S3C_KEYPAD_DEBUG 
+//#define S3C_KEYPAD_DEBUG 
 
 #ifdef S3C_KEYPAD_DEBUG
 #define DPRINTK(x...) printk("S3C-Keypad " x)
@@ -71,52 +69,45 @@
 #define FO \
     printk ("[ "SUBJECT " (%s,%d) ] " "%s - OUT" "\n", __func__, __LINE__, __func__);
 
-static struct timer_list keypad_timer;
-static int is_timer_on = FALSE;
 static struct clk *keypad_clock;
-
 
 static u32 keymask[KEYPAD_COLUMNS];
 static u32 prevmask[KEYPAD_COLUMNS];
 
 static int in_sleep = 0;
 
-//static ssize_t keyshort_test(struct device *dev, struct device_attribute *attr, char *buf);
+#ifdef CONFIG_MACH_CHIEF
+static struct timer_list keypad_timer;
+static int is_timer_on = FALSE;
 
-//hojun_kim [
-void keypad_led_onoff(int OnOff)
-{
-//hojun_kim 100511[
-  int key_status = 0;
-  
-  //hojun_kim 100526 [
-    if(system_rev >= 0x08)
-    { 
-    
-      key_status = (readl(S5PV210_GPH0DAT)) & (1 << 5);
-    }
-    else
-    {
-      
-  key_status = (readl(S5PV210_GPJ1DAT)) & (1 << 4);
-    }
-  //hojun_kim ]  
-  printk("\nKeypad_LED_ONOFF(Slide=%d)\n",key_status);
-//hojun_kim  
-  if(OnOff && key_status)
-  {
-        s3c_gpio_cfgpin(S5PV210_GPJ2(6), S3C_GPIO_INPUT);
-        s3c_gpio_setpull(S5PV210_GPJ2(6), S3C_GPIO_PULL_UP);
-        printk("\n[Keypad LED]Turn ON\n");
-  }
-  else
-  {
-        s3c_gpio_cfgpin(S5PV210_GPJ2(6), S3C_GPIO_INPUT);
-        s3c_gpio_setpull(S5PV210_GPJ2(6), S3C_GPIO_PULL_DOWN);
-        printk("\n[Keypad LED]Turn OFF\n");
-  }
-}
-//hojun_kim ]
+/* keypad_led */
+static struct timer_list keyled_timer;
+
+// active keyled  
+int keyLedOn = 0;
+int keyLedSigOn = 0;
+static void keypad_led_onoff(int OnOff);
+void keypad_led_onoff_Ext(int OnOff){ keypad_led_onoff(OnOff); }
+
+/* keypad_led */
+int keyled_lcdOn = 0;
+static void keyled_timer_start();
+static void keyled_timer_stop();
+
+void keyled_lcd_on_Ext(){ keyled_lcdOn = 1;  if(keypad_clock) keyled_timer_start(); }
+void keyled_lcd_off_Ext(){ keyled_lcdOn = 0; if(keypad_clock) keyled_timer_stop(); }
+EXPORT_SYMBOL(keyled_lcd_on_Ext);
+EXPORT_SYMBOL(keyled_lcd_off_Ext);
+#endif
+
+
+
+
+
+#define IRQ_VOL_UP_INT (IRQ_EINT_GROUP1_BASE + 7)
+extern unsigned int HWREV;
+
+struct input_dev *g_dev;
 
 #if defined (CONFIG_MACH_S5PC110_P1P2)
 static int keypad_scan(void)
@@ -142,10 +133,8 @@ static int keypad_scan(void)
 		udelay(100);
 
 		//rval = ~(readl(key_base+S3C_KEYIFROW)) & ((1<<KEYPAD_ROWS)-1) ;
-		rval = ~(readl(S5PV210_GPH3DAT)) & ((1<<KEYPAD_ROWS)-1) ; //changed for victory ....
-	       // rval = ~(readl(key_base+S3C_KEYIFROW)) & (0x1E3F);//((1<<KEYPAD_ROWS)-1) ;
-                //rval = ((rval & 0x1E00)>>3) | (rval&0x3F);
-	
+		rval = ~(readl(S5PV210_GPH3DAT)) & ((1<<KEYPAD_ROWS)-1) ;
+		
 
 		keymask[col] = rval; 
 
@@ -159,10 +148,50 @@ static int keypad_scan(void)
 }
 #else
 
+#ifdef CONFIG_MACH_CHIEF  
+static void keypad_scan_activate_column(int active_col)
+{
+    u32     cval ;
+
+    switch (active_col)
+    {
+        case -1 :   /* Clear All */
+            s3c_gpio_cfgpin(GPIO_KEYSCAN6, S3C_GPIO_OUTPUT) ;
+            s3c_gpio_cfgpin(GPIO_KEYSCAN7, S3C_GPIO_OUTPUT) ;
+            gpio_set_value(GPIO_KEYSCAN6, GPIO_LEVEL_LOW) ;
+            gpio_set_value(GPIO_KEYSCAN7, GPIO_LEVEL_LOW) ;
+            writel(KEYIFCOL_CLEAR, key_base+S3C_KEYIFCOL);
+            break ;
+
+        case 6 :
+            s3c_gpio_cfgpin(GPIO_KEYSCAN6, S3C_GPIO_OUTPUT) ;
+            gpio_set_value(GPIO_KEYSCAN6, GPIO_LEVEL_LOW) ;
+            s3c_gpio_cfgpin(GPIO_KEYSCAN7, S3C_GPIO_INPUT) ;    /* HI-Z */
+            cval = KEYCOL_DMASK & 0xFFFF ; /* All port Hi-Z */
+            writel(cval, key_base+S3C_KEYIFCOL) ;
+            break ;
+
+        case 7 :
+            s3c_gpio_cfgpin(GPIO_KEYSCAN7, S3C_GPIO_OUTPUT) ;
+            gpio_set_value(GPIO_KEYSCAN7, GPIO_LEVEL_LOW) ;
+            s3c_gpio_cfgpin(GPIO_KEYSCAN6, S3C_GPIO_INPUT) ;    /* HI-Z */
+            cval = KEYCOL_DMASK & 0xFFFF ; /* All port Hi-Z */
+            writel(cval, key_base+S3C_KEYIFCOL) ;
+             break ;
+
+        default :
+            s3c_gpio_cfgpin(GPIO_KEYSCAN6, S3C_GPIO_INPUT) ;    /* HI-Z */
+            s3c_gpio_cfgpin(GPIO_KEYSCAN7, S3C_GPIO_INPUT) ;    /* HI-Z */
+            cval = KEYCOL_DMASK & ~(((1<<8) | 1) << active_col) ;
+            writel(cval, key_base+S3C_KEYIFCOL) ;
+            break ;
+    }
+}
+#endif
 static int keypad_scan(void)
 {
 
-	u32 col,cval,rval,gpio;
+	u32 col,cval,rval;
 
 	DPRINTK("H3C %x H2C %x \n",readl(S5PV210_GPH3CON),readl(S5PV210_GPH2CON));
 	DPRINTK("keypad_scan() is called\n");
@@ -171,30 +200,73 @@ static int keypad_scan(void)
 
 	for (col=0; col < KEYPAD_COLUMNS; col++) {
 
-		cval = KEYCOL_DMASK & ~((1 << col) | (1 << col+ 8)); // clear that column number and 
+#ifdef CONFIG_MACH_CHIEF
+        keypad_scan_activate_column(col) ;
+#else		
+		cval = KEYCOL_DMASK & ~((1 << col) | (1 << (col+8))); // clear that column number and 
 
 		writel(cval, key_base+S3C_KEYIFCOL);             // make that Normal output.
 								 // others shuld be High-Z output.
+								 
+		
+#endif
 		udelay(KEYPAD_DELAY);
-
-		// rval = ~(readl(key_base+S3C_KEYIFROW)) & ((1<<KEYPAD_ROWS)-1) ;
-
-                rval = ~(readl(key_base+S3C_KEYIFROW)) & (0x1E3F);//((1<<KEYPAD_ROWS)-1) ;
-                rval = ((rval & 0x1E00)>>3) | (rval&0x3F);
-
+		//rval = ~(readl(key_base+S3C_KEYIFROW)) & ((1<<KEYPAD_ROWS)-1) ;
+#ifdef CONFIG_MACH_CHIEF    
+	    rval = ~(readl(key_base+S3C_KEYIFROW)) & ((1<<KEYPAD_ROWS)-1) ;
+#else	
+		rval = ~(readl(key_base+S3C_KEYIFROW)) & (0xE /* KBR(0) is not used*/);
+#endif
+		 
 		keymask[col] = rval; 
 	}
 
+#ifdef CONFIG_MACH_CHIEF   
+    keypad_scan_activate_column(-1) ;   /* All Column Low */
+#else	
 	writel(KEYIFCOL_CLEAR, key_base+S3C_KEYIFCOL);
+#endif
 
 	return 0;
 }
 
 #endif
 
-extern char LCD_ON_OFF ;
+#ifdef CONFIG_MACH_CHIEF
+/* keypad_led */
+static void keyled_timer_start()
+{
+   extern unsigned int charging_mode_get(void);
+   
+   if (charging_mode_get() || (keyled_lcdOn == 0))  // Power-off charging
+      return;
 
-static void keypad_timer_handler(unsigned long data)
+    keyled_timer.expires = jiffies + (3*HZ);    // 3sec
+    
+    if (keyLedOn) {
+       mod_timer(&keyled_timer,keyled_timer.expires);
+    } else {
+       add_timer(&keyled_timer);
+       keypad_led_onoff(1); // keyLed_3sec
+    }
+}
+
+static void keyled_timer_stop()
+{
+    if(keyLedOn)
+    {
+       keypad_led_onoff(0); // keyLed_3sec
+       del_timer_sync(&keyled_timer);
+    }
+}
+
+static void keyled_timer_handler(unsigned long data)
+{
+    keypad_led_onoff(0); // keyLed_3sec
+}
+#endif
+
+static void s3c_keypad_timer_handler(unsigned long data)
 {
 	u32 press_mask;
 	u32 release_mask;
@@ -202,12 +274,7 @@ static void keypad_timer_handler(unsigned long data)
 	int i,col;
 	struct s3c_keypad *pdata = (struct s3c_keypad *)data;
 	struct input_dev *dev = pdata->dev;
-	static some_keys_pressed = 0;
-        #if 0	//suik_Fix
-        #ifdef CONFIG_KERNEL_DEBUG_SEC	
-	static bool is_first_key_pressed;
-        #endif	
-        #endif
+	struct timer_list * timer = &pdata->keypad_timer;
 
 	keypad_scan();
 
@@ -219,39 +286,24 @@ static void keypad_timer_handler(unsigned long data)
 #ifdef CONFIG_CPU_FREQ
 #if USE_PERF_LEVEL_KEYPAD
 //		if (press_mask || release_mask)
-//`			set_dvfs_target_level(LEV_400MHZ);
+//			set_dvfs_target_level(LEV_400MHZ);
 #endif
 #endif
 		i = col * KEYPAD_ROWS;
 
 		while (press_mask) {
 			if (press_mask & 1) {
-
-                                 if(LCD_ON_OFF ==1){
-			if((i+1 == 35) || (i+1 == 36) || i+1 == 46)
-                        some_keys_pressed++;
-			if(some_keys_pressed < 3)
-                      	input_report_key(dev,i+1,1);
-                             pr_err("[key_press] keycode=%d\n", i+1);
-					}
-				else
-				{
-				if( i  != 5 &&i  != 15 &&i  != 25 &&i  != 35 &&i  != 44 )
-					{
-				input_report_key(dev,i+1,1);
-                             pr_err("[key_press_OFF] keycode=%d\n", i+1);
-					}
-				}
-//#ifdef CONFIG_KERNEL_DEBUG_SEC
-#if DEBUG_LOG_ENABLE
-				printk(KERN_DEBUG"[KEYPAD] key Pressed  : key %d map %d\n",i, i+1);
+				input_report_key(dev,pdata->keycodes[i],1);
+#ifdef CONFIG_MACH_CHIEF				
+                keyled_timer_start(); /* keypad_led */
+#endif				
+/* #ifdef CONFIG_KERNEL_DEBUG_SEC */
+#ifdef DEBUG_LOG_ENABLE
+				printk(KERN_DEBUG"[KEYPAD] key Pressed  : key %d map %d\n",i, pdata->keycodes[i]);
 #else
 				printk(KERN_DEBUG"[KEYPAD] key Pressed\n");
 #endif
-			
-				/*input_report_key(dev,pdata->keycodes[i],1);
-				DPRINTK("\nkey Pressed  : key %d map %d\n",i, pdata->keycodes[i]); */
-			} 
+						}
 			press_mask >>= 1;
 			i++;
 		}
@@ -260,29 +312,18 @@ static void keypad_timer_handler(unsigned long data)
 
 		while (release_mask) {
 			if (release_mask & 1) {
-
-                               if(LCD_ON_OFF ==1){
-			       if((i+1 == 35) || (i+1 == 36) || (i+1 == 46))
-			        some_keys_pressed--;
-				input_report_key(dev,i+1,0);
-                             pr_err("[key_release] keycode=%d\n", i+1);
-				}
-				else
-				{
-				if( i  != 5 &&i  != 15 &&i  != 25 &&i  != 35 &&i  != 44 )				
-				{
-				input_report_key(dev,i+1,0);
-                             pr_err("[key_release_OFF] keycode=%d\n", i+1);
-					}
-				}
-//#ifdef CONFIG_KERNEL_DEBUG_SEC
-#if DEBUG_LOG_ENABLE
-				printk(KERN_DEBUG"[KEYPAD] key Pressed  : %d  map %d\n",i, i+1);
+				input_report_key(dev,pdata->keycodes[i],0);
+#ifdef CONFIG_MACH_CHIEF				
+                keyled_timer_start(); /* keypad_led */
+#endif				
+/* #ifdef CONFIG_KERNEL_DEBUG_SEC */
+#ifdef DEBUG_LOG_ENABLE
+				printk(KERN_DEBUG"[KEYPAD] key Released : %d  map %d\n",i,pdata->keycodes[i]);
 #else
-				printk(KERN_DEBUG"[KEYPAD] key Pressed\n");
-#endif                                
+				printk(KERN_DEBUG"[KEYPAD] key Released\n");
+#endif
 
-                    }
+            }
 			release_mask >>= 1;
 			i++;
 		}
@@ -293,197 +334,382 @@ static void keypad_timer_handler(unsigned long data)
 
 
 	if (restart_timer) {
-		mod_timer(&keypad_timer,jiffies + HZ/10);
+		mod_timer(timer, timer->expires);
 	} else {
-                is_timer_on = FALSE;
-		del_timer(&keypad_timer);	
 		writel(KEYIFCON_INIT, key_base+S3C_KEYIFCON);
+		pdata->keypad_timer_on = FALSE;
 	}
 
- 
 }
-// froyo_merge_check nandu
-static irqreturn_t s3c_keypad_isr(int irq, void *dev_id)  
+
+static void s3c_keypad_starttimer(struct s3c_keypad * s3c_keypad)
 {
+	struct timer_list * timer = &s3c_keypad->keypad_timer;
 
-	/* disable keypad interrupt and schedule for keypad timer handler */
-	writel(readl(key_base+S3C_KEYIFCON) & ~(INT_F_EN|INT_R_EN), key_base+S3C_KEYIFCON);
-
-	//keypad_timer.expires = jiffies;
-      	keypad_timer.expires = jiffies + (3 * HZ/100); // victory froyo merge nandu
-
-
-
-	if ( is_timer_on == FALSE) {
-		add_timer(&keypad_timer);
-		is_timer_on = TRUE;
-	} else {
-		mod_timer(&keypad_timer,keypad_timer.expires);
+	if( s3c_keypad->keypad_timer_on ) {
+		mod_timer(timer, timer->expires);
 	}
-	/*Clear the keypad interrupt status*/
-	writel(KEYIFSTSCLR_CLEAR, key_base+S3C_KEYIFSTSCLR);
-	
+	else {
+		init_timer(timer);
+#ifdef CONFIG_MACH_CHIEF
+		timer->expires		= jiffies + (3*HZ/100);	
+#else	
+		timer->expires		= jiffies + (HZ/100);
+#endif		
+		timer->data			= (unsigned long)s3c_keypad;
+		timer->function		= s3c_keypad_timer_handler;
+		add_timer(timer);
+
+		s3c_keypad->keypad_timer_on = TRUE;
+	}
+}
+
+#ifdef CONFIG_MACH_CHIEF
+static irqreturn_t s3c_keygpio_isr(int irq, void *dev_id)
+{
+	unsigned int key_status;
+	static unsigned int prev_key_status = (1 << 6);
+	struct s3c_keypad *pdata = (struct s3c_keypad *)dev_id;
+	struct input_dev *dev = pdata->dev;
+	#define KEY_POWER_EVT       116
+
+	// Beware that we may not obtain exact key up/down status at
+	// this point.
+	key_status = (readl(S5PV210_GPH2DAT)) & (1 << 6);
+
+	// If ISR is called and up/down status remains the same, we
+	// must have lost one and should report that first with
+	// upside/down.
+	if(in_sleep)
+	{
+	    if (key_status == prev_key_status)
+		{
+    		INPUT_REPORT_KEY(dev, KEY_POWER_EVT, key_status ? 1 : 0);
+		}
+		in_sleep = 0;
+	}
+
+	INPUT_REPORT_KEY(dev, KEY_POWER_EVT, key_status ? 0 : 1);
+   
+   	keyled_timer_start(); /* keypad_led */
+
+	prev_key_status = key_status;
+	printk(KERN_DEBUG "s3c_keygpio_isr pwr key_status =%d,\n", key_status);
+
 	return IRQ_HANDLED;
 }
 
-
-
-
-#ifndef CONFIG_S5PV210_CRESPO_DELTA
-// nandu froyo merge
-static irqreturn_t s3c_slide_isr(int irq, void *dev_id)
+static int s3c_keygpio_isr_setup(void *pdev)
 {
-  unsigned int key_status = 0;
-  struct s3c_keypad *pdata = (struct s3c_keypad *)dev_id;
-  struct input_dev *dev = pdata->dev;
-//hojun_kim 100526 [
-  if(system_rev >= 0x08)
-  {
+    int ret;
+    //PWR key
+    s3c_gpio_setpull(S5PV210_GPH2(6), S3C_GPIO_PULL_NONE);
+    set_irq_type(IRQ_EINT(22), IRQ_TYPE_EDGE_BOTH);
 
-    key_status = (readl(S5PV210_GPH0DAT)) & (1 << 5);
-  }
-  else
-  {
+    // stk.lim: Add IRQF_DISABLED to eliminate any possible race
+    // regarding key status
+    ret = request_irq(IRQ_EINT(22), s3c_keygpio_isr, IRQF_DISABLED
+                        | IRQF_SAMPLE_RANDOM, "key gpio", (void *)pdev);
 
-  key_status = (readl(S5PV210_GPJ1DAT)) & (1 << 4);
-  }
-//hojun_kim ]  
-  printk("\nSlide status=%x\n", !key_status);
-  input_report_switch(dev, SW_LID,!key_status);//hojun_kim
-  input_sync(dev); //hojun_kim
+    if (ret) {
+        printk("request_irq failed (IRQ_KEYPAD (gpio)) !!!\n");
+        ret = -EIO;
+    }
 
-  //hojun_kim 100511[
-  if(!key_status)
-  {
-    keypad_led_onoff(0);
-  }
-else
-  {
-    keypad_led_onoff(1);
-  }
+	ret = enable_irq_wake(IRQ_EINT(22));
+	if (ret) {
+		printk(KERN_ERR"%s : Failed to enable power key irq wake\n", __func__);
+	}
 
-  //hojun_kim  
-
-  return IRQ_HANDLED;
-}
-
-// nandu new added function froyo merge fro victory
-static int s3c_slidegpio_isr_setup(void *pdev)
-{
-  int ret;
-
-//  s3c_gpio_cfgpin(S5PV210_GPJ1(4), S3C_GPIO_SFN(0));
-//hojun_kim 100526 [
-  if(system_rev >= 0x08)
-  {
-	  s3c_gpio_cfgpin(S5PV210_GPH0(5), S3C_GPIO_SFN(0));
-
-	  s3c_gpio_setpull(S5PV210_GPH0(5), S3C_GPIO_PULL_NONE);
-
-	  set_irq_type(IRQ_EINT5, IRQ_TYPE_EDGE_BOTH);
-	  ret = can_request_irq(IRQ_EINT5, IRQF_DISABLED);
-	  printk("\n can_request_irq=%d\n",ret);
-	  ret = request_irq(IRQ_EINT5, s3c_slide_isr, IRQF_DISABLED,
-			  "slide pgio", (void *) pdev);
-	  enable_irq_wake(IRQ_EINT5);
-  }
-  else
-  {
-	  s3c_gpio_cfgpin(S5PV210_GPJ1(4), S3C_GPIO_SFN(0));
-
-	  s3c_gpio_setpull(S5PV210_GPJ1(4), S3C_GPIO_PULL_NONE);
-
-	  set_irq_type((IRQ_EINT_GROUP19_BASE + 4), IRQ_TYPE_EDGE_BOTH);
-	  ret = request_irq((IRQ_EINT_GROUP19_BASE + 4), s3c_slide_isr, IRQF_DISABLED,
-			  "slide pgio", (void *) pdev);
-
-  }
-
-//hojun_kim ]
-
-  if (ret) {
-    printk("request_irq failed (IRQ_SLIDE (gpio)) !!!\n");
-    ret = -EIO;
- }
-  printk("\n@@ Slidegpio_isr_setup\n");
-  return ret;
+    return ret;
 }
 
 #endif
 
-// froyo_merge_check nandu
- static ssize_t keyshort_test(struct device *dev, struct device_attribute *attr, char *buf)
+
+static irqreturn_t s3c_keypad_isr(int irq, void *dev_id)
 {
-	int count;
+	struct s3c_keypad * s3c_keypad = (struct s3c_keypad *)dev_id;
+
+	/* disable keypad interrupt and schedule for keypad timer handler */
+	writel(readl(key_base+S3C_KEYIFCON) & ~(INT_F_EN|INT_R_EN), key_base+S3C_KEYIFCON);
+
+	s3c_keypad_starttimer(s3c_keypad);
+
+	/*Clear the keypad interrupt status*/
+	writel(KEYIFSTSCLR_CLEAR, key_base+S3C_KEYIFSTSCLR);
+    
+	DPRINTK("s3c_keypad_isr \n");
 	
-        int mask=0;
-  u32 col=0,cval=0,rval=0;
-  if(!gpio_get_value(S5PV210_GPH2(6)))//Power Key
-  {
-    mask |= 0x1;
-  }
+	return IRQ_HANDLED;
+}
+#if 0 /* gpio key use gpio-event.c */
+static irqreturn_t s3c_keygpio_isr(int irq, void *dev_id)
+{
+	unsigned int key_status;
+	unsigned int * prev_key_status;
+	KEYGPIO_INT_INFO *  int_info = (KEYGPIO_INT_INFO *)dev_id;
+	KEYGPIO_INFO *		info = int_info->info;
+	struct input_dev *	dev = int_info->dev;
 
-  for (col=0; col < KEYPAD_COLUMNS; col++)
-  {
-    cval = KEYCOL_DMASK & ~((1 << col) | (1 << (col+ 8))); // clear that column number and 
+	prev_key_status = &info->prev_key_status;
 
-    writel(cval, key_base+S3C_KEYIFCOL);             // make that Normal output.
-               // others shuld be High-Z output.
-    udelay(KEYPAD_DELAY);
-    rval = ~(readl(key_base+S3C_KEYIFROW)) & (0x1E3F);//((1<<KEYPAD_ROWS)-1) ;
-    rval = ((rval & 0x1E00)>>3) | (rval&0x3F);
-    writel(KEYIFCOL_CLEAR, key_base+S3C_KEYIFCOL);
+	// Beware that we may not obtain exact key up/down status at
+	// this point.
 
-    if(rval)
+	key_status = (readl(info->gpio_data) & info->gpio_data_mask);
+
+	// If ISR is called and up/down status remains the same, we
+	// must have lost one and should report that first with
+	// upside/down.
+	if(in_sleep)
+	{
+		if (key_status == *prev_key_status)
+		{
+			INPUT_REPORT_KEY(dev, info->keycode, key_status ? 1 : 0);
+		}
+		in_sleep = 0;
+	}
+
+	INPUT_REPORT_KEY(dev, info->keycode, key_status ? 0 : 1);
+
+	*prev_key_status = key_status;
+
+	printk(KERN_DEBUG "s3c_keygpio_isr [%d] key_status =%d\n", int_info->index, key_status);
+
+	return IRQ_HANDLED;
+}
+
+static void
+s3c_keygpio_init(struct s3c_keypad * s3c_keypad)
+{
+	KEYGPIO_INFO * info_tbl = (KEYGPIO_INFO *)&s3c_keypad->keygpio_info_tbl[0];
+	int i;
+
+	/* set gpio, irq of gpio keys */
+	info_tbl[KEYGPIO_VOLUME_UP].irq 		= IRQ_EINT(24);
+	info_tbl[KEYGPIO_VOLUME_UP].gpio		= S5PV210_GPH3(0); 
+	info_tbl[KEYGPIO_VOLUME_UP].gpio_data	= (S5PV210_GPH3_BASE + 0x04);
+//	info_tbl[KEYGPIO_VOLUME_UP].gpio_data	= S5PV210_GPH3DAT;
+	info_tbl[KEYGPIO_VOLUME_UP].gpio_data_mask	= (1 << 0);
+	info_tbl[KEYGPIO_VOLUME_UP].keycode = 115;
+
+	info_tbl[KEYGPIO_POWER].irq 		= IRQ_EINT(22);
+	info_tbl[KEYGPIO_POWER].gpio 		= S5PV210_GPH2(6);
+	info_tbl[KEYGPIO_POWER].gpio_data	= (S5PV210_GPH2_BASE + 0x04);
+//	info_tbl[KEYGPIO_POWER].gpio_data	= S5PV210_GPH2DAT;
+	info_tbl[KEYGPIO_POWER].gpio_data_mask = (1 << 6);
+	info_tbl[KEYGPIO_POWER].keycode		= 116;
+
+	for(i=0; i < KEYGPIO_MAX; i++) {
+		KEYGPIO_INFO * info = &info_tbl[i];
+		int gpio = info->gpio;
+
+		info->prev_key_status = info->gpio_data_mask;
+
+		s3c_gpio_cfgpin(gpio, S3C_GPIO_INPUT);
+		s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
+	}
+}
+
+static int 
+s3c_keygpio_isr_register(struct s3c_keypad * s3c_keypad)
+{
+	int ret;
+	int i, max_keynum;
+	KEYGPIO_INFO * info_tbl = (KEYGPIO_INFO *)&s3c_keypad->keygpio_info_tbl[0];
+	
+	max_keynum = HWREV == 8 ? KEYGPIO_POWER : KEYGPIO_MAX;
+	for(i=0; i < max_keynum; i++) {
+		int gpio = info_tbl[i].gpio; 
+		int irq = info_tbl[i].irq;
+		KEYGPIO_INT_INFO * int_info = &s3c_keypad->keygpio_int_info_tbl[i];
+
+		/* setup keygpio_int_info */
+		int_info->index	= i;
+		int_info->info	= &info_tbl[i];
+		int_info->dev	= s3c_keypad->dev;
+
+		set_irq_type(irq, IRQ_TYPE_EDGE_BOTH);
+		ret = request_irq(irq, s3c_keygpio_isr, IRQF_SAMPLE_RANDOM,
+				        "keygpio", (void *)int_info);
+	    if (ret) {
+			printk("request_irq failed (IRQ_KEYPAD (key vol up)) !!!\n");
+        	ret = -EIO;
+			break;
+ 	   }
+	}
+
+	return ret;
+}
+
+static void
+s3c_keygpio_isr_unregister(struct s3c_keypad * s3c_keypad)
+{
+	int ret;
+	int i, max_keynum;
+	KEYGPIO_INFO * info_tbl = (KEYGPIO_INFO *)&s3c_keypad->keygpio_info_tbl[0];
+	
+	max_keynum = HWREV == 8 ? KEYGPIO_POWER : KEYGPIO_MAX;
+	for(i=0; i < max_keynum; i++) {
+		int irq = info_tbl[i].irq;
+		KEYGPIO_INT_INFO * int_info = &s3c_keypad->keygpio_int_info_tbl[i];
+
+		free_irq(irq, (void *)int_info); 
+
+	}
+}
+#endif
+
+#ifdef CONFIG_MACH_CHIEF
+static void keypad_led_onoff(int OnOff)
+{
+
+   printk(KERN_ERR "\nKeypad_LED_ONOFF(OnOff=%d)\n", OnOff);
+
+   if(OnOff)
+   {
+        keyLedOn = 1; // active keyled
+        /* HW Requeset Fixed keypad led on issue  when AP is sleep wakeup*/
+        s3c_gpio_cfgpin(GPIO_MAIN_KEY_LED_NEW, S3C_GPIO_OUTPUT);
+        gpio_set_value(GPIO_MAIN_KEY_LED_NEW, GPIO_LEVEL_HIGH);
+        /* For backward compatible after HW 0.7 */
+        // remove //s3c_gpio_cfgpin(GPIO_MAIN_KEY_LED_EN, S3C_GPIO_OUTPUT);
+        // remove //gpio_set_value(GPIO_MAIN_KEY_LED_EN, GPIO_LEVEL_HIGH);
+   }
+   else
+   {
+        keyLedOn = 0; // active keyled
+        /* HW Requeset Fixed keypad led on issue  when AP is sleep wakeup*/
+        s3c_gpio_cfgpin(GPIO_MAIN_KEY_LED_NEW, S3C_GPIO_OUTPUT);
+        gpio_set_value(GPIO_MAIN_KEY_LED_NEW, GPIO_LEVEL_LOW);
+        /* For backward compatible after HW 0.7 */
+        // remove // s3c_gpio_cfgpin(GPIO_MAIN_KEY_LED_EN, S3C_GPIO_OUTPUT);
+        // remove // gpio_set_value(GPIO_MAIN_KEY_LED_EN, GPIO_LEVEL_LOW);
+   }
+}
+#endif
+
+static ssize_t keyshort_test(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct s3c_keypad * s3c_keypad = dev_get_drvdata(dev);
+	KEYGPIO_INFO * info_tbl = (KEYGPIO_INFO *)&s3c_keypad->keygpio_info_tbl[0];
+
+	int count;
+	int mask=0;
+    	u32 col=0;//,cval=0,rval=0;
+	int i;
+	int rval;
+	u32 press_mask;
+
+	/* check gpio keys */
+	for(i=0; i < KEYGPIO_MAX; i++) {
+		if( !gpio_get_value(info_tbl[i].gpio) )
+			mask |= (1 << i);
+	}
+
+#ifndef CONFIG_MACH_CHIEF
+	/* check key scan */
+	keypad_scan();
+
+	for(col=0; col < KEYPAD_COLUMNS; col++) {
+		press_mask = keymask[col]; 
+
+		printk("[%d] press_mask (0x%x) \n", col, press_mask);
+
+		i = col * KEYPAD_ROWS;
+
+		while (press_mask) {
+			if (press_mask & 1) {
+				mask |= (1 << (i + KEYGPIO_MAX));
+			}
+			press_mask >>= 1;
+			i++;
+		}
+	}
+#else	
+    rval = ~readl(key_base+S3C_KEYIFROW) & 0x01/*0x007F*/ ;     /* SENSE[0-6] ---> SENSE[0] for chief*/
+    writel(KEYIFCOL_CLEAR, key_base+S3C_KEYIFCOL) ;
+    if (rval)
     {
-      mask |=0x100;
+        mask |= 0x100 ;
     }
-  }
+#endif	
+#ifdef CONFIG_MACH_STEALTHV
+	if (gpio_get_value(S5PV210_GPH2(6)) == 0) /* power key */
+		mask |= 1;
 
-
-
-
-       if(/*!gpio_get_value(GPIO_KBR0) || !gpio_get_value(GPIO_KBR1) || !gpio_get_value(GPIO_KBR2) || !gpio_get_value(GPIO_nPOWER)  || !gpio_get_value(S5PV210_GPH3(5))*/ mask)
+	if (gpio_get_value(S5PV210_GPH3(0)) == 0) /* volume up key */
+		mask |= 1;
+#endif
+    if(mask)
 	{
 		count = sprintf(buf,"PRESS\n");
-              printk("keyshort_test: PRESS\n");
+        printk("keyshort_test: PRESS 0x%x\n", mask);
 	}
 	else
 	{
 		count = sprintf(buf,"RELEASE\n");
-              printk("keyshort_test: RELEASE\n");
+        printk("keyshort_test: RELEASE 0x%x\n", mask);
 	}	
 
 	return count;
 }
+static DEVICE_ATTR(key, 0664, keyshort_test, NULL);
 
-static ssize_t key_led_control(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+extern void keypad_led_control(bool onOff);
+static ssize_t keypad_brightness_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
 {
-        unsigned char data;
-        if(sscanf(buf, "%d\n", &data) == 1) {
-                          printk("key_led_control: %d \n", data);
+    int value;
+  
+	
+    sscanf(buf, "%d", &value);
 
-                          if(data == 1)
-                          {
-                                keypad_led_onoff(1);
-                          }
-                          else if(data == 2)
-                          {
-                                keypad_led_onoff(0);
-                          }
+#ifndef CONFIG_MACH_CHIEF
+    if (value)
+        keypad_led_control(1);
+    else
+        keypad_led_control(0);
 
+	printk(KERN_DEBUG "[%s] brightness : %d \n", __FUNCTION__, value);
+#else
+        if(value == 1)
+        {
+           keypad_led_onoff(1);
         }
-        else
-                printk("key_led_control Error\n");
+        else if(value == 2)
+        {
+           keypad_led_onoff(0);
+        }
+#endif 
 
-                return size;
+   return size;
 }
+static DEVICE_ATTR(brightness, 0664, NULL, keypad_brightness_store);
 
-// nandu froyo merge
+unsigned int keywakeup_is_enabled = 0;
+static int keypad_keywakeup_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
+{
+	int value;
+	
+	sscanf(buf, "%d", &value);
 
-static DEVICE_ATTR(key_pressed, S_IRUGO | S_IWUSR | S_IXOTH, keyshort_test, NULL);
-static DEVICE_ATTR(brightness, S_IRUGO | S_IWUSR | S_IXOTH, NULL, key_led_control);
-// nandu froyo merge
+    if (value == 0)
+        keywakeup_is_enabled = 0;
+    else if (value == 1)
+        keywakeup_is_enabled = 1;
+
+    printk(KERN_DEBUG "[%s] keywakeup_is_enabled : %d\n", __FUNCTION__, keywakeup_is_enabled);
+
+	return len;
+}
+static int keypad_keywakeup_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	printk(KERN_DEBUG "[%s] keywakeup_is_enabled : %d\n", __FUNCTION__, keywakeup_is_enabled);
+
+	return sprintf(buf,"%u\n", keywakeup_is_enabled);
+}
+static DEVICE_ATTR(keywakeup, 0664, keypad_keywakeup_show, keypad_keywakeup_store);
 
 static int __init s3c_keypad_probe(struct platform_device *pdev)
 {
@@ -492,8 +718,8 @@ static int __init s3c_keypad_probe(struct platform_device *pdev)
 	struct s3c_keypad *s3c_keypad;
 	int ret, size;
 	int key, code;
-
-         unsigned int gpio;
+	struct class *key_class;
+    	struct device *keypress;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
@@ -529,6 +755,7 @@ static int __init s3c_keypad_probe(struct platform_device *pdev)
 	s3c_keypad = kzalloc(sizeof(struct s3c_keypad), GFP_KERNEL);
 	input_dev = input_allocate_device();
 
+	g_dev = input_dev;
 	if (!s3c_keypad || !input_dev) {
 		ret = -ENOMEM;
 		goto err_alloc;
@@ -537,10 +764,24 @@ static int __init s3c_keypad_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, s3c_keypad);
 	s3c_keypad->dev = input_dev;
 	
+	/* Set GPIO Port for keypad mode and pull-up disable*/
+	s3c_setup_keypad_cfg_gpio(KEYPAD_ROWS, KEYPAD_COLUMNS);
+
+	/* STEALTH-V don't use KBR(0)-GPH3- for keypad */
+#ifndef CONFIG_MACH_CHIEF	
+	s3c_gpio_cfgpin(S5PV210_GPH3(0), S3C_GPIO_INPUT);
+	s3c_gpio_setpull(S5PV210_GPH3(0), S3C_GPIO_PULL_UP);
+#endif
+
 	writel(KEYIFCON_INIT, key_base+S3C_KEYIFCON);
 	writel(KEYIFFC_DIV, key_base+S3C_KEYIFFC);
-
 	writel(KEYIFCOL_CLEAR, key_base+S3C_KEYIFCOL);
+	
+#ifdef CONFIG_MACH_CHIEF
+   /* GPIO_CONTROL */
+    gpio_set_value(GPIO_KEYSCAN6, GPIO_LEVEL_LOW) ;
+    gpio_set_value(GPIO_KEYSCAN7, GPIO_LEVEL_LOW) ;
+#endif
 
 	/* create and register the input driver */
 	set_bit(EV_KEY, input_dev->evbit);
@@ -559,10 +800,15 @@ static int __init s3c_keypad_probe(struct platform_device *pdev)
 
 	//printk("%s, keypad row number is %d, column is %d",__FUNCTION__, s3c_keypad->nr_rows, s3c_keypad->no_cols);
 
-      // set_bit(26 & KEY_MAX, input_dev->keybit);  // nandu victory froyo merge
-     
-        input_set_capability(input_dev, EV_SW, SW_LID); //hojun_kim
- 
+#ifndef CONFIG_MACH_CHIEF
+      set_bit(26 & KEY_MAX, input_dev->keybit);
+      set_bit(42 & KEY_MAX, input_dev->keybit);
+#endif 
+      
+#ifdef 	CONFIG_MACH_CHIEF  
+   input_set_capability(input_dev, EV_SW, SW_LID); // TODO:FORTE
+#endif
+
 	input_dev->name = DEVICE_NAME;
 	input_dev->phys = "s3c-keypad/input0";
 	
@@ -573,12 +819,18 @@ static int __init s3c_keypad_probe(struct platform_device *pdev)
 
 	input_dev->keycode = keypad_keycode;
 
-
-	/* Scan timer init */
-	init_timer(&keypad_timer);
-	keypad_timer.function = keypad_timer_handler;
-	keypad_timer.data = (unsigned long)s3c_keypad;
-
+	ret = input_register_device(input_dev);
+	if (ret) {
+		printk("Unable to register s3c-keypad input device!!!\n");
+		goto err_regi;
+	}
+   /* keypad_led timer init */
+#ifdef CONFIG_MACH_CHIEF   
+   init_timer(&keyled_timer);
+   keyled_timer.function = keyled_timer_handler;
+   keyled_timer.data = (unsigned long)s3c_keypad;
+   s3c_keygpio_isr_setup((void *)s3c_keypad);
+#endif
 	/* For IRQ_KEYPAD */
 	keypad_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (keypad_irq == NULL) {
@@ -586,67 +838,51 @@ static int __init s3c_keypad_probe(struct platform_device *pdev)
 		ret = -ENOENT;
 		goto err_irq;
 	}
-
-
-       // newly added block for victory froyo merge
-#if 1
-       ret = request_irq(keypad_irq->start, s3c_keypad_isr, IRQF_SAMPLE_RANDOM,
-		DEVICE_NAME, (void *) pdev);
+	ret = request_irq(keypad_irq->start, s3c_keypad_isr, IRQF_SAMPLE_RANDOM,
+		DEVICE_NAME, (void *) s3c_keypad);
 	if (ret) {
 		printk("request_irq failed (IRQ_KEYPAD) !!!\n");
 		ret = -EIO;
 		goto err_irq;
 	}
+#if 0 /* gpio key use gpio-event.c */
+	s3c_keygpio_init((void *)s3c_keypad);
+	s3c_keygpio_isr_register((void *)s3c_keypad);
 #endif
-
-#ifndef CONFIG_S5PV210_CRESPO_DELTA
-        s3c_slidegpio_isr_setup((void *)s3c_keypad);
-#endif
-       
-         ret = input_register_device(input_dev);
-        if (ret) {
-                printk("Unable to register s3c-keypad input device!!!\n");
-                goto out;
-        }
-
-          keypad_timer.expires = jiffies + (3 * HZ/100);
-
-
-          if (is_timer_on == FALSE) {
-                add_timer(&keypad_timer);
-                is_timer_on = TRUE;
-        } else {
-                mod_timer(&keypad_timer,keypad_timer.expires);
-        }
-
- 
-        input_report_switch(s3c_keypad->dev, SW_LID, 1); //hojun_kim
-        input_sync(s3c_keypad->dev); //hojun_kim
-  // nandu froyo victory merge
-        
-	printk( DEVICE_NAME " Initialized\n");
-	
-	if (device_create_file(&pdev->dev, &dev_attr_key_pressed) < 0)
-	{
-		printk("%s s3c_keypad_probe\n",__FUNCTION__);
-		pr_err("Failed to create device file(%s)!\n", dev_attr_key_pressed.attr.name);
+	/* for 1-5 applicaion 
+	   /sys/devices/virtual/key/key/key 
+	 */
+	key_class = class_create(THIS_MODULE,"key");
+	if(IS_ERR(key_class)){
+		printk("failed to keyclass\n");
+        goto out;
 	}
 
-         if (device_create_file(&pdev->dev, &dev_attr_brightness) < 0)
-         {
-        printk("%s s3c_keypad_probe\n",__FUNCTION__);
-        pr_err("Failed to create device file(%s)!\n", dev_attr_brightness.attr.name);
+	keypress = device_create(key_class, NULL, 0 , s3c_keypad, "key");
+	if(IS_ERR(keypress))	
+		printk("failed to create a keypress device\n");
+	else{
+		if(device_create_file(keypress, &dev_attr_key)<0)
+			printk("failed to create device file key\n");	
+	}
+	
+    if (device_create_file(keypress, &dev_attr_brightness) < 0) {
+        printk("fail to create device file brightness\n");
+  	}
+    
+    if (device_create_file(keypress, &dev_attr_keywakeup) < 0) {
+        printk("fail to create device file keywakeup\n");
   	}
 
+    printk( DEVICE_NAME " Initialized\n");
 
-	
 	return 0;
 
 out:
 	free_irq(keypad_irq->start, input_dev);
-	free_irq(keypad_irq->end, input_dev);
 
 err_irq:
+err_regi:
 	input_free_device(input_dev);
 	kfree(s3c_keypad);
 	
@@ -667,7 +903,9 @@ err_req:
 
 static int s3c_keypad_remove(struct platform_device *pdev)
 {
-	struct input_dev *input_dev = platform_get_drvdata(pdev);
+	struct s3c_keypad * s3c_keypad = platform_get_drvdata(pdev);
+	struct input_dev * input_dev = s3c_keypad->dev;
+	
 	writel(KEYIFCON_CLEAR, key_base+S3C_KEYIFCON);
 
 	if(keypad_clock) {
@@ -676,12 +914,21 @@ static int s3c_keypad_remove(struct platform_device *pdev)
 		keypad_clock = NULL;
 	}
 
+	if( s3c_keypad->keypad_timer_on ) {
+		del_timer(&s3c_keypad->keypad_timer);
+	}
+#if 0 /* gpio key use gpio-event.c */	
+	s3c_keygpio_isr_unregister(s3c_keypad);
+#endif
 	input_unregister_device(input_dev);
 	iounmap(key_base);
 	kfree(pdev->dev.platform_data);
 	free_irq(IRQ_KEYPAD, (void *) pdev);
 
-	del_timer(&keypad_timer);	
+#ifdef CONFIG_MACH_CHIEF
+    del_timer(&keyled_timer); /* keypad_led */
+#endif	
+
 	printk(DEVICE_NAME " Removed.\n");
 	return 0;
 }
@@ -701,7 +948,9 @@ static int s3c_keypad_suspend(struct platform_device *dev, pm_message_t state)
 {
 	keyifcon = readl(key_base+S3C_KEYIFCON);
 	keyiffc = readl(key_base+S3C_KEYIFFC);
-
+#ifdef CONFIG_MACH_STEALTHV
+	enable_irq_wake(IRQ_KEYPAD);
+#else
 	s3c_pm_do_save(s3c_keypad_save, ARRAY_SIZE(s3c_keypad_save));
 	
 	//writel(~(0xfffffff), KEYPAD_ROW_GPIOCON);
@@ -712,21 +961,23 @@ static int s3c_keypad_suspend(struct platform_device *dev, pm_message_t state)
 	clk_disable(keypad_clock);
 
 	in_sleep = 1;
-
+#endif
 	return 0;
 }
 
 
 static int s3c_keypad_resume(struct platform_device *dev)
 {
-	struct s3c_keypad          *s3c_keypad = (struct s3c_keypad *) platform_get_drvdata(dev);
-      struct input_dev           *iDev = s3c_keypad->dev;
-	unsigned int key_temp_data=0;
-	
+	//struct s3c_keypad          *s3c_keypad = (struct s3c_keypad *) platform_get_drvdata(dev);
+    //struct input_dev           *iDev = s3c_keypad->dev;
+	//unsigned int key_temp_data=0;
+#ifdef CONFIG_MACH_STEALTHV	
+	disable_irq_wake(IRQ_KEYPAD);
+#else
 	printk(KERN_DEBUG "++++ %s\n", __FUNCTION__ );
 
 	clk_enable(keypad_clock);
-
+#endif
 	writel(KEYIFCON_INIT, key_base+S3C_KEYIFCON);
 	writel(keyiffc, key_base+S3C_KEYIFFC);
 	writel(KEYIFCOL_CLEAR, key_base+S3C_KEYIFCOL);
@@ -745,12 +996,14 @@ static int s3c_keypad_resume(struct platform_device *dev)
 		input_report_key(iDev, KEYCODE_UNKNOWN, 0);//ENDCALL down event
 		}
 
-	//printk("H3C %x H2C %x \n",readl(S5PV210_GPH3CON),readl(S5PV210_GPH2CON));
+	//printk("H3C %x H2C %x \n",readl(S5PC11X_GPH3CON),readl(S5PC11X_GPH2CON));
 #endif
+#ifndef CONFIG_MACH_STEALTHV
 	s3c_pm_do_restore(s3c_keypad_save, ARRAY_SIZE(s3c_keypad_save));
 
 	enable_irq(IRQ_KEYPAD);
 	printk(KERN_DEBUG "---- %s\n", __FUNCTION__ );
+#endif
 	return 0;
 }
 #else

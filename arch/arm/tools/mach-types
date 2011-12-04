@@ -1,4 +1,4 @@
-# Database of machine macros and numbers
+# Database of machine macros and numbersE
 #
 # This file is linux/arch/arm/tools/mach-types
 #
@@ -297,7 +297,6 @@ bluegrama		ARCH_BLUEGRAMMA		BLUEGRAMMA		279
 ipod			ARCH_IPOD		IPOD			280
 adsbitsyx		ARCH_ADSBITSYX		ADSBITSYX		281
 trizeps2		ARCH_TRIZEPS2		TRIZEPS2		282
-viper			ARCH_VIPER		VIPER			283
 adsbitsyplus		SA1100_ADSBITSYPLUS	ADSBITSYPLUS		284
 adsagc			SA1100_ADSAGC		ADSAGC			285
 stp7312			ARCH_STP7312		STP7312			286
@@ -2951,8 +2950,8 @@ netviz			MACH_NETVIZ		NETVIZ			2964
 flexibity		MACH_FLEXIBITY		FLEXIBITY		2965
 wlan_computer		MACH_WLAN_COMPUTER	WLAN_COMPUTER		2966
 herring			MACH_HERRING		HERRING			3084
-aries			MACH_ARIES		ARIES			2193
-crespo			MACH_CRESPO		CRESPO			2193
-atlas			MACH_ATLAS		ATLAS			2193
-forte                   MACH_FORTE              FORTE                   2193
-victory			MACH_VICTORY		VICTORY			2193
+stealthv		MACH_STEALTHV		STEALTHV		2193
+aegis			MACH_AEGIS			AEGIS		2193
+viper         	  MACH_VIPER     		VIPER       2193
+aries			MACH_ARIES		ARIES			2194
+chief			MACH_CHIEF		CHIEF			2193

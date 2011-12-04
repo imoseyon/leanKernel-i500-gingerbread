@@ -492,7 +492,7 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 	dev_kfree_skb_any(skb);
 
 #ifdef CONFIG_USB_GADGET_S3C_OTGD_DMA_MODE
-	if(req->buf != skb->data)
+	if (req->buf != skb->data)
 		kfree(req->buf);
 #endif
 
@@ -595,7 +595,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	req->buf = kmalloc(skb->len, GFP_ATOMIC | GFP_DMA);
 
 	if (!req->buf) {
-	req->buf = skb->data;
+		req->buf = skb->data;
 		printk("%s: fail to kmalloc [req->buf = skb->data]\n", __FUNCTION__);
 	}
 	else
@@ -611,14 +611,9 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	 * though any robust network rx path ignores extra padding.
 	 * and some hardware doesn't like to write zlps.
 	 */
-#if 1 //CONFIG_MACH_VICTORY
 	if (dev->zlp)
-		req->zero = 1;
+	req->zero = 1;
 	else if (length % in->maxpacket == 0)
-#else
-        req->zero = 1;
-	if (!dev->zlp && (length % in->maxpacket) == 0)
-#endif
 		length++;
 
 	req->length = length;
@@ -646,7 +641,7 @@ drop:
 
 
 #ifdef CONFIG_USB_GADGET_S3C_OTGD_DMA_MODE
-		if(req->buf != skb->data)
+		if (req->buf != skb->data)
 			kfree(req->buf);
 #endif
 		spin_lock_irqsave(&dev->req_lock, flags);
@@ -817,6 +812,10 @@ int gether_setup(struct usb_gadget *g, u8 ethaddr[ETH_ALEN])
 	net = alloc_etherdev(sizeof *dev);
 	if (!net)
 		return -ENOMEM;
+
+
+	/* verizon requirement : mtu size fix to 1428 */        
+	net->mtu = 1428;
 
 	dev = netdev_priv(net);
 	spin_lock_init(&dev->lock);

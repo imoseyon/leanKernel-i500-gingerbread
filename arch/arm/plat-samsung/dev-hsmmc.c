@@ -55,8 +55,6 @@ struct platform_device s3c_device_hsmmc0 = {
 	},
 };
 
-EXPORT_SYMBOL(s3c_device_hsmmc0);
-
 void s3c_sdhci0_set_platdata(struct s3c_sdhci_platdata *pd)
 {
 	struct s3c_sdhci_platdata *set = &s3c_hsmmc0_def_platdata;

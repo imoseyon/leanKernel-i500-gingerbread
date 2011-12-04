@@ -24,6 +24,7 @@ struct sec_switch_platform_data {
 
 #define SWITCH_MODEM	0
 #define SWITCH_PDA	1
+#define SWITCH_LTE	2
 
 #define USB_VBUS_ALL_OFF 0
 #define USB_VBUS_CP_ON	 1

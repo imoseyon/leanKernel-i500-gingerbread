@@ -227,8 +227,8 @@ struct s3cfb_global {
 	struct device		*dev;
 	struct clk		*clock;
 	struct regulator	*regulator;
-	struct regulator        *vcc_lcd;
-	struct regulator        *vlcd;
+	struct regulator	*vcc_lcd;
+	struct regulator	*vlcd;
 	int			irq;
 	struct fb_info		**fb;
 	struct completion	fb_complete;
@@ -357,7 +357,7 @@ extern void s3cfb_late_resume(struct early_suspend *h);
 #endif
 #endif
 
-#if defined(CONFIG_FB_S3C_TL2796)
+#if defined(CONFIG_FB_S3C_TL2796) || defined(CONFIG_FB_S3C_LD9040) || defined(CONFIG_FB_S3C_S6D05A1X12)||defined(CONFIG_FB_S3C_S6D16A0X)
 extern void tl2796_ldi_init(void);
 extern void tl2796_ldi_enable(void);
 extern void tl2796_ldi_disable(void);

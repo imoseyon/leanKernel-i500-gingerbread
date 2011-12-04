@@ -67,23 +67,21 @@ void s5pv210_setup_sdhci0_cfg_gpio(struct platform_device *dev, int width)
 		printk(KERN_ERR "Wrong SD/MMC bus width : %d\n", width);
 	}
 
-	if (machine_is_herring() || machine_is_aries()) {
-		s3c_gpio_cfgpin(S5PV210_GPJ2(7), S3C_GPIO_OUTPUT);
-		s3c_gpio_setpull(S5PV210_GPJ2(7), S3C_GPIO_PULL_NONE);
-		gpio_set_value(S5PV210_GPJ2(7), 1);
-	}
+	s3c_gpio_cfgpin(GPIO_MASSMEMORY_EN, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_MASSMEMORY_EN, S3C_GPIO_PULL_NONE);
+	gpio_set_value(GPIO_MASSMEMORY_EN, 1);
 }
 
 void s5pv210_setup_sdhci1_cfg_gpio(struct platform_device *dev, int width)
 {
 	unsigned int gpio;
-	
+
 	switch (width) {
-		/* Channel 1 supports 4-bit bus width */
-		case 0:
-		case 1:
-		case 4:
-			/* Set all the necessary GPIO function and pull up/down */
+	/* Channel 1 supports 4-bit bus width */
+	case 0:
+	case 1:
+	case 4:
+		/* Set all the necessary GPIO function and pull up/down */
 		for (gpio = S5PV210_GPG1(0); gpio <= S5PV210_GPG1(6); gpio++) {
 			if (gpio != S5PV210_GPG1(2)) {
 				s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
@@ -100,15 +98,6 @@ void s5pv210_setup_sdhci1_cfg_gpio(struct platform_device *dev, int width)
 void s5pv210_setup_sdhci2_cfg_gpio(struct platform_device *dev, int width)
 {
 	unsigned int gpio;
-	unsigned int memory_enable;
-
-	if(machine_is_herring() || machine_is_crespo() || machine_is_victory())
-		memory_enable = S5PV210_GPG2(2);
-        else if (machine_is_atlas() || machine_is_forte() ||  machine_is_aries()){	
-		memory_enable = S5PV210_GPJ2(7);
-	}else
-		return -1;
-
 
 	switch (width) {
 	/* Channel 2 supports 4 and 8-bit bus width */
@@ -135,11 +124,6 @@ void s5pv210_setup_sdhci2_cfg_gpio(struct platform_device *dev, int width)
 	default:
 		printk(KERN_ERR "Wrong SD/MMC bus width : %d\n", width);
 	}
-
-	s3c_gpio_cfgpin(memory_enable, S3C_GPIO_OUTPUT);
-	s3c_gpio_setpull(memory_enable, S3C_GPIO_PULL_NONE);
-	gpio_set_value(memory_enable, 1);
-
 }
 
 void s5pv210_setup_sdhci3_cfg_gpio(struct platform_device *dev, int width)
@@ -155,7 +139,7 @@ void s5pv210_setup_sdhci3_cfg_gpio(struct platform_device *dev, int width)
 		for (gpio = S5PV210_GPG3(0); gpio <= S5PV210_GPG3(6); gpio++) {
 			if (gpio != S5PV210_GPG3(2)) {
 				s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
-				s3c_gpio_setpull(gpio, S3C_GPIO_PULL_UP);
+				s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
 			}
 			s3c_gpio_set_drvstrength(gpio, S3C_GPIO_DRVSTR_3X);
 		}
@@ -208,14 +192,13 @@ void s5pv210_setup_sdhci_cfg_card(struct platform_device *dev,
 		if ((ios->clock > range_start) && (ios->clock < range_end))
 			ctrl3 = S3C_SDHCI_CTRL3_FCSELTX_BASIC |
 				S3C_SDHCI_CTRL3_FCSELRX_BASIC;
-		else{
-			printk("%s MMC_SD card inderted \n",__func__);
+		else {
 			if (card->type == MMC_TYPE_SD)
-			   ctrl3 =  S3C_SDHCI_CTRL3_FCSELTX_BASIC |
-	                            S3C_SDHCI_CTRL3_FCSELRX_BASIC;
+				ctrl3 = S3C_SDHCI_CTRL3_FCSELTX_BASIC |
+					S3C_SDHCI_CTRL3_FCSELRX_BASIC;
 			else
-			   ctrl3 = S3C_SDHCI_CTRL3_FCSELTX_BASIC |
-	                           S3C_SDHCI_CTRL3_FCSELRX_INVERT;
+				ctrl3 = S3C_SDHCI_CTRL3_FCSELTX_BASIC |
+					S3C_SDHCI_CTRL3_FCSELRX_INVERT;
 		}
 	}
 
@@ -283,7 +266,6 @@ unsigned int universal_sdhci2_detect_ext_cd(void)
 {
 	unsigned int card_status = 0;
 
-
 #ifdef CONFIG_MMC_DEBUG
 	printk(KERN_DEBUG "Universal :SD Detect function\n");
 	printk(KERN_DEBUG "eint conf %x  eint filter conf %x",
@@ -291,13 +273,13 @@ unsigned int universal_sdhci2_detect_ext_cd(void)
 	printk(KERN_DEBUG "eint pend %x  eint mask %x",
 		readl(S5P_EINT_PEND(3)), readl(S5P_EINT_MASK(3)));
 #endif
-	if (machine_is_crespo() || machine_is_victory())
-		card_status = gpio_get_value(S5PV210_GPH1(0)) & (1 << 0);
-	else if(machine_is_atlas())
-		card_status = gpio_get_value(S5PV210_GPH3(4));
-	else if(machine_is_forte())
-		card_status = gpio_get_value(S5PV210_GPH3(7)) & (1 << 7);
-	
+
+#ifdef CONFIG_MACH_CHIEF 
+
+	card_status = gpio_get_value(GPIO_T_FLASH_DETECT);
+#else
+	card_status = gpio_get_value(S5PV210_GPH3(4));
+#endif
 	printk(KERN_DEBUG "Universal : Card status %d\n", card_status ? 0 : 1);
 	return card_status ? 0 : 1;
 
@@ -306,28 +288,15 @@ unsigned int universal_sdhci2_detect_ext_cd(void)
 void universal_sdhci2_cfg_ext_cd(void)
 {
 	printk(KERN_DEBUG "Universal :SD Detect configuration\n");
-	if (machine_is_crespo()){
-		s3c_gpio_cfgpin(S5PV210_GPH1(0), S3C_GPIO_SFN(0xf));
-		s3c_gpio_setpull(S5PV210_GPH1(0), S3C_GPIO_PULL_NONE);
-		set_irq_type(IRQ_EINT8, IRQ_TYPE_EDGE_BOTH);
-	}else if (machine_is_atlas()) {
-		s3c_gpio_cfgpin(S5PV210_GPH3(4),S3C_GPIO_SFN(0xf));
-		set_irq_type(IRQ_EINT(28), IRQ_TYPE_EDGE_BOTH);
-		s3c_gpio_setpull(S5PV210_GPH3(4), S3C_GPIO_PULL_NONE);
-	}else if (machine_is_forte()) {
-                s3c_gpio_cfgpin(S5PV210_GPH3(7),S3C_GPIO_SFN(0xf));
-                set_irq_type(IRQ_EINT(31), IRQ_TYPE_EDGE_BOTH);
-                s3c_gpio_setpull(S5PV210_GPH3(7), S3C_GPIO_PULL_NONE);
+#ifdef CONFIG_MACH_CHIEF 
 
-        }else
-		if (machine_is_victory()) {
-			s3c_gpio_cfgpin(S5PV210_GPH1(0), S3C_GPIO_SFN(0xf));
-			s3c_gpio_setpull(S5PV210_GPH1(0), S3C_GPIO_PULL_NONE);
-			if(system_rev >= 0x08)
-				set_irq_type(IRQ_EINT8, IRQ_TYPE_EDGE_BOTH);
-			else
-				set_irq_type(IRQ_EINT2, IRQ_TYPE_EDGE_BOTH);
-	}
+	s3c_gpio_setpull(GPIO_T_FLASH_DETECT, S3C_GPIO_PULL_NONE);
+	set_irq_type(IRQ_EINT(31), IRQ_TYPE_EDGE_BOTH);
+#else
+	s3c_gpio_setpull(S5PV210_GPH3(4), S3C_GPIO_PULL_NONE);
+	set_irq_type(IRQ_EINT(28), IRQ_TYPE_EDGE_BOTH);
+
+#endif
 }
 
 static struct s3c_sdhci_platdata hsmmc0_platdata = {
@@ -350,7 +319,7 @@ static struct s3c_sdhci_platdata hsmmc2_platdata = {
 };
 #endif
 
-#if defined(CONFIG_S3C_DEV_HSMMC3)
+#if defined(CONFIG_S3C_DEV_HSMMC3) && !defined(CONFIG_MACH_VIPER)
 static struct s3c_sdhci_platdata hsmmc3_platdata = { 0 };
 #endif
 
@@ -360,21 +329,18 @@ void s3c_sdhci_set_platdata(void)
 	s3c_sdhci0_set_platdata(&hsmmc0_platdata);
 #endif
 #if defined(CONFIG_S3C_DEV_HSMMC2)
-	if (machine_is_herring() || machine_is_aries() || machine_is_atlas()) {
-		hsmmc2_platdata.ext_cd = IRQ_EINT(28);
-	}else if (machine_is_crespo()|| machine_is_victory()) {
-		hsmmc2_platdata.ext_cd = IRQ_EINT8;
-	}else if (machine_is_forte()) 
-		hsmmc2_platdata.ext_cd = IRQ_EINT(31);
-	
-        hsmmc2_platdata.cfg_ext_cd = universal_sdhci2_cfg_ext_cd;
-        hsmmc2_platdata.detect_ext_cd = universal_sdhci2_detect_ext_cd;
+#ifndef CONFIG_MACH_CHIEF
+	hsmmc2_platdata.ext_cd = IRQ_EINT(28);
+#else
+	hsmmc2_platdata.ext_cd = IRQ_EINT(31);
+#endif
+	hsmmc2_platdata.cfg_ext_cd = universal_sdhci2_cfg_ext_cd;
+	hsmmc2_platdata.detect_ext_cd = universal_sdhci2_detect_ext_cd;
 
 	s3c_sdhci2_set_platdata(&hsmmc2_platdata);
 #endif
-#if defined(CONFIG_S3C_DEV_HSMMC3)
-	if (machine_is_herring() || machine_is_aries())
-		hsmmc3_platdata.built_in = 1;
+#if defined(CONFIG_S3C_DEV_HSMMC3) && !defined(CONFIG_MACH_VIPER)
+	hsmmc3_platdata.built_in = 1;
 	s3c_sdhci3_set_platdata(&hsmmc3_platdata);
 #endif
-}
+};

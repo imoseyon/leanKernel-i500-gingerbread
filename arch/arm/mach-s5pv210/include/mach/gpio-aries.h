@@ -19,6 +19,15 @@
 #define GPIO_BT_UART_RTS		S5PV210_GPA0(3)
 #define GPIO_BT_UART_RTS_AF		2
 
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPA04		S5PV210_GPA0(4)
+
+#define GPIO_GPA05 		S5PV210_GPA0(5)
+
+#define GPIO_GPA06  		S5PV210_GPA0(6)
+
+#define GPIO_GPA07   		S5PV210_GPA0(7)
+#else
 #define GPIO_GPS_UART_RXD		S5PV210_GPA0(4)
 #define GPIO_GPS_UART_RXD_AF		2
 
@@ -30,6 +39,7 @@
 
 #define GPIO_GPS_UART_RTS		S5PV210_GPA0(7)
 #define GPIO_GPS_UART_RTS_AF		2
+#endif
 
 #define GPIO_AP_RXD			S5PV210_GPA1(0)
 #define GPIO_AP_RXD_AF			2
@@ -48,21 +58,30 @@
 #define GPIO_MSENSE_nRST		S5PV210_GPB(1)
 
 #define GPIO_CAM_VGA_nRST		S5PV210_GPB(2)
-#ifdef CONFIG_MACH_VICTORY
-#define GPIO_BT_nRST			S5PV210_GPJ0(4)
-#define GPIO_WLAN_BT_EN			S5PV210_GPJ0(3)
-#else
+
 #define GPIO_BT_nRST			S5PV210_GPB(3)
-#define GPIO_WLAN_BT_EN			S5PV210_GPB(5)
-#endif
 
 #define GPIO_BOOT_MODE			S5PV210_GPB(4)
 
+#define GPIO_WLAN_BT_EN			S5PV210_GPB(5)
 
 #define GPIO_GPB6			S5PV210_GPB(6)
 
 #define GPIO_GPB7			S5PV210_GPB(7)
 
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPC00			S5PV210_GPC0(0)
+
+#define GPIO_GPC01			S5PV210_GPC0(1)
+
+#define GPIO_GPC02			S5PV210_GPC0(2)
+
+#define GPIO_GPC03			S5PV210_GPC0(3)
+
+#define GPIO_GPC04			S5PV210_GPC0(4)
+
+#define GPIO_GPC10			S5PV210_GPC1(0)
+#else
 #define GPIO_REC_PCM_CLK		S5PV210_GPC0(0)
 #define GPIO_REC_PCM_CLK_AF		3
 
@@ -78,6 +97,7 @@
 #define GPIO_REC_PCM_OUT_AF		3
 
 #define BLOW_PCM_CLK			S5PV210_GPC1(0)
+#endif
 
 #define GPIO_GPC11			S5PV210_GPC1(1)
 
@@ -91,7 +111,11 @@
 
 #define GPIO_VIBTONE_PWM		S5PV210_GPD0(1)
 
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPD02 			S5PV210_GPD0(2)
+#else
 #define GPIO_VIBTONE_PWM1		S5PV210_GPD0(2)
+#endif
 
 #define GPIO_GPD03			S5PV210_GPD0(3)
 
@@ -101,10 +125,11 @@
 #define GPIO_CAM_SCL_29V		S5PV210_GPD1(1)
 #define GPIO_CAM_SCL_29V_AF		2
 
-#if 0	// Crespo
-#define GYRO_SDA_28V			S5PV210_GPD1(2)
-#define GYRO_SCL_28V			S5PV210_GPD1(3)
-#else	// S1_EUR
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPD12			S5PV210_GPD1(2)
+
+#define GPIO_GPD13			S5PV210_GPD1(3)
+#else
 #define GPIO_FM_SDA_28V			S5PV210_GPD1(2)
 #define GPIO_FM_SDA_28V_AF		2
 
@@ -117,6 +142,7 @@
 
 #define GPIO_TSP_SCL_28V		S5PV210_GPD1(5)
 #define GPIO_TSP_SCL_28V_AF		2
+
 #define GPIO_CAM_PCLK			S5PV210_GPE0(0)
 #define GPIO_CAM_PCLK_AF		2
 
@@ -263,25 +289,6 @@
 #define GPIO_NAND_D3			S5PV210_GPG0(6)
 #define GPIO_NAND_D3_AF			2
 
-#if 0	// Crespo
-#define GPIO_GPS_nRST			S5PV210_GPG1(0)
-
-#define GPIO_GPS_PWR_EN			S5PV210_GPG1(1)
-
-#define GPIO_WLAN_RST			S5PV210_GPG1(2)
-
-#define GPIO_NAND_D4			S5PV210_GPG1(3)
-#define GPIO_NAND_D4_AF			3
-
-#define GPIO_NAND_D5			S5PV210_GPG1(4)
-#define GPIO_NAND_D5_AF			3
-
-#define GPIO_NAND_D6			S5PV210_GPG1(5)
-#define GPIO_NAND_D6_AF			3
-
-#define GPIO_NAND_D7			S5PV210_GPG1(6)
-#define GPIO_NAND_D7_AF			3
-#else	// S1_EUR
 #define GPIO_WLAN_SDIO_CLK		S5PV210_GPG1(0)
 #define GPIO_WLAN_SDIO_CLK_AF		2
 
@@ -302,7 +309,6 @@
 
 #define GPIO_WLAN_SDIO_D3		S5PV210_GPG1(6)
 #define GPIO_WLAN_SDIO_D3_AF		2
-#endif	// Crespo
 
 #define GPIO_T_FLASH_CLK		S5PV210_GPG2(0)
 #define GPIO_T_FLASH_CLK_AF		2
@@ -324,33 +330,19 @@
 #define GPIO_T_FLASH_D3			S5PV210_GPG2(6)
 #define GPIO_T_FLASH_D3_AF		2
 
-#if 0	// Crespo(I9020) pin setting
-#define GPIO_WLAN_SDIO_CLK		S5PV210_GPG3(0)
-#define GPIO_WLAN_SDIO_CLK_AF		2
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPG30			S5PV210_GPG3(0)
 
-#define GPIO_WLAN_SDIO_CMD		S5PV210_GPG3(1)
-#define GPIO_WLAN_SDIO_CMD_AF		2
+#define GPIO_GPG31			S5PV210_GPG3(1)
 
-#define GPIO_WLAN_nRST			S5PV210_GPG3(2)
-#define GPIO_WLAN_nRST_AF		1
-
-#define GPIO_WLAN_SDIO_D0		S5PV210_GPG3(3)
-#define GPIO_WLAN_SDIO_D0_AF		2
-
-#define GPIO_WLAN_SDIO_D1		S5PV210_GPG3(4)
-#define GPIO_WLAN_SDIO_D1_AF		2
-
-#define GPIO_WLAN_SDIO_D2		S5PV210_GPG3(5)
-#define GPIO_WLAN_SDIO_D2_AF		2
-
-#define GPIO_WLAN_SDIO_D3		S5PV210_GPG3(6)
-#define GPIO_WLAN_SDIO_D3_AF		2
+#define GPIO_FLM_SEL			S5PV210_GPG3(2)
 #else
 #define GPIO_GPS_nRST			S5PV210_GPG3(0)
  
 #define GPIO_GPS_PWR_EN			S5PV210_GPG3(1)
  
 #define GPIO_GPG32			S5PV210_GPG3(2)
+#endif
  
 #define GPIO_TA_CURRENT_SEL_AP		S5PV210_GPG3(3)
  
@@ -358,7 +350,6 @@
 
 #define GPIO_WLAN_WAKE			S5PV210_GPG3(5)
 #define GPIO_WLAN_WAKE_AF		1
-#endif
 
 #define GPIO_AP_PS_HOLD			S5PV210_GPH0(0)
 
@@ -378,13 +369,13 @@
 #define GPIO_AP_PMIC_IRQ		S5PV210_GPH0(7)
 #define GPIO_AP_PMIC_IRQ_AF		0xFF
 
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_FUEL_INT_N			S5PV210_GPH1(0)
+#else
 #define GPIO_GPH10			S5PV210_GPH1(0)
-
-#if 0	// Crespo
-#define GPIO_PDA_ACTIVE			S5PV210_GPH1(1)
-#else	// S1_EUR
-#define GPIO_GPH11				S5PV210_GPH1(1)
 #endif
+
+#define GPIO_GPH11			S5PV210_GPH1(1)
 
 #define GPIO_GPH12			S5PV210_GPH1(2)
 #define GPIO_nINT_ONEDRAM_AP		S5PV210_GPH1(3)
@@ -396,8 +387,12 @@
 
 #define GPIO_GPH16			S5PV210_GPH1(6)
 
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPH17			S5PV210_GPH1(7)
+#else
 #define GPIO_PHONE_ACTIVE		S5PV210_GPH1(7)
 #define GPIO_PHONE_ACTIVE_AF		2
+#endif
 
 #define GPIO_KBC0			S5PV210_GPH2(0)
 #define GPIO_KBC0_AF			3
@@ -408,23 +403,17 @@
 #define GPIO_KBC2			S5PV210_GPH2(2)
 #define GPIO_KBC2_AF			3
 
-#if 0	// Crespo
-#define GPIO_BT_WAKE			S5PV210_GPH2(2)
-#define GPIO_WLAN_WAKE			S5PV210_GPH2(3)
-#define GPIO_WLAN_WAKE_AF		1
-
-#define	GPIO_KBC_DATA			(GPIO_KBC2 + 0x04)
-#else	// S1_EUR
-#define GPIO_GPH23				S5PV210_GPH2(3)
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_PHONE_ACTIVE		S5PV210_GPH2(3)
+#define GPIO_PHONE_ACTIVE_AF		0xF
+#else
+#define GPIO_GPH23			S5PV210_GPH2(3)
 #endif
 
 #define GPIO_WLAN_HOST_WAKE		S5PV210_GPH2(4)
 #define GPIO_WLAN_HOST_WAKE_AF		0xF
-#ifdef CONFIG_MACH_VICTORY
-#define GPIO_BT_HOST_WAKE		S5PV210_GPH0(4)
-#else
+
 #define GPIO_BT_HOST_WAKE		S5PV210_GPH2(5)
-#endif
 #define GPIO_BT_HOST_WAKE_AF		0xF
 
 #define GPIO_nPOWER			S5PV210_GPH2(6)
@@ -432,12 +421,8 @@
 #define GPIO_JACK_nINT			S5PV210_GPH2(7)
 #define GPIO_JACK_nINT_AF			0xF
 
-#if 0	// Crespo
-#define GPIO_TA_CURRENT_SEL_AP		S5PV210_GPH3(0)
-#else	// S1_EUR
 #define GPIO_KBR0			S5PV210_GPH3(0)
 #define GPIO_KBR0_AF			3
-#endif
 
 #define GPIO_KBR1			S5PV210_GPH3(1)
 #define GPIO_KBR1_AF			3
@@ -445,21 +430,14 @@
 #define GPIO_KBR2			S5PV210_GPH3(2)
 #define GPIO_KBR2_AF			3
 
-#if 0	// Crespo
-#define GPIO_MSENSE_IRQ			S5PV210_GPH3(3)
-
-#define	GPIO_KBR_DATA			(GPIO_KBR1 + 0x04)
-#else	// S1_EUR
 #define GPIO_KBR3			S5PV210_GPH3(3)
 #define GPIO_KBR3_AF			3
-#endif
 
 #define GPIO_T_FLASH_DETECT		S5PV210_GPH3(4)
 
-#if 0	// Crespo
-/* EAR_SEN_END_OPEN */
+#if defined(CONFIG_ARIES_NTT)
 #define GPIO_OK_KEY			S5PV210_GPH3(5)
-#else	// S1_EUR
+#else
 #define GPIO_MSENSE_IRQ			S5PV210_GPH3(5)
 #endif
 
@@ -499,18 +477,10 @@
 
 #define GPIO_HWREV_MODE3		S5PV210_GPJ0(7)
 
-#if 0	// Crespo
-#define GPIO_CAM_FLASH_EN_SET		S5PV210_GPJ1(0)
-#else	// S1_EUR
 #define GPIO_PHONE_ON			S5PV210_GPJ1(0)
-#endif
 
 #define GPIO_VIBTONE_EN1		S5PV210_GPJ1(1)
-#if 0	// Crespo
-#define GPIO_FLASH_EN			S5PV210_GPJ1(2)
-#else	// S1_EUR
 #define GPIO_GPJ30			S5PV210_GPJ1(2)
-#endif
 
 #define GPIO_TOUCH_EN			S5PV210_GPJ1(3)
 #define	GPIO_TOUCH_EN_AF		1
@@ -519,25 +489,33 @@
 
 #define GPIO_CAM_MEGA_nRST		S5PV210_GPJ1(5)
 
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPJ20			S5PV210_GPJ2(0)
+
+#define GPIO_GPJ21			S5PV210_GPJ2(1)
+
+#define GPIO_OLED_DET			S5PV210_GPJ2(2)
+
+#define GPIO_GPJ23			S5PV210_GPJ2(3)
+
+#define GPIO_USIM_BOOT			S5PV210_GPJ2(4)
+
+#define GPIO_SUB_MICBIAS_EN		S5PV210_GPJ2(5)
+
+#else
 #define GPIO_FLASH_EN			S5PV210_GPJ2(0)
 
 #define GPIO_CAM_FLASH_EN_SET		S5PV210_GPJ2(1)
 
 #define GPIO_OLED_DET			S5PV210_GPJ2(2)
 
-#if 0	// Crespo
-#define GPIO_EAR_SEL			S5PV210_GPJ2(3)
-#else	// S1_EUR
 #define GPIO_CODEC_XTAL_EN		S5PV210_GPJ2(3)
-#endif
 
 #define GPIO_FM_INT			S5PV210_GPJ2(4)
 #define GPIO_FM_RST			S5PV210_GPJ2(5)
-#if 0	// crespo
-#define GPIO_TV_OUT_SEL			S5PV210_GPJ2(6)
-#else	// S1_EUR
-#define GPIO_EARPATH_SEL		S5PV210_GPJ2(6)
 #endif
+
+#define GPIO_EARPATH_SEL		S5PV210_GPJ2(6)
 
 #define GPIO_MASSMEMORY_EN		S5PV210_GPJ2(7)
 
@@ -545,10 +523,10 @@
 #define _3_TOUCH_SCL_28V		S5PV210_GPJ3(1)
 #define _3_GPIO_TOUCH_EN		S5PV210_GPJ3(2)
 #define _3_GPIO_TOUCH_EN_AF		1
-#if 0	// Crespo
-#define GPIO_EAR_ADC_SEL		S5PV210_GPJ3(3)
-#define GPIO_EAR_ADC_SEL_AF		1
-#else	// S1_EUR
+
+#if defined(CONFIG_ARIES_NTT)
+#define GPIO_GPJ33			S5PV210_GPJ3(3)
+#else
 #define _3_GPIO_TOUCH_CE		S5PV210_GPJ3(3)
 #define _3_GPIO_TOUCH_ST_AF		1
 #endif
@@ -567,8 +545,6 @@
 #define GPIO_MICBIAS_EN			S5PV210_GPJ4(2)
 
 #define GPIO_AP_PMIC_SCL		S5PV210_GPJ4(3)
-
-#define GPIO_EAR_MICBIAS_EN		S5PV210_GPJ4(4)
 
 #define GPIO_MP010			S5PV210_MP01(0)
 
@@ -602,11 +578,7 @@
 
 #define GPIO_MP032			S5PV210_MP03(2)
 
-#if 0	// Crespo
-#define GPIO_MP033			S5PV210_MP03(3)
-#else	// S1_EUR
 #define GPIO_PDA_ACTIVE			S5PV210_MP03(3)
-#endif
 
 #define GPIO_VCC_18V_PDA		S5PV210_MP03(4)
 
@@ -699,7 +671,7 @@
 #define	GPIO_N_POWER			S5PV210_GPH2(6)
 #define	GPIO_N_POWER_AF			2
 
-#define	GPIO_BT_RST			GPIO_BT_nRST
+#define	GPIO_BT_RST			S5PV210_GPB(3)
 #define	GPIO_WLAN_RST			S5PV210_GPG1(2)
 
 #define GPIO_JACK_INT_N			S5PV210_GPH2(7)

@@ -13,11 +13,7 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/videodev2.h>
-#ifdef CONFIG_MACH_FORTE
-#include <linux/videodev2_samsung_forte.h>
-#else
 #include <linux/videodev2_samsung.h>
-#endif // CONFIG_MACH_FORTE
 #include <linux/io.h>
 #include <mach/map.h>
 #include <plat/regs-fimc.h>
@@ -173,7 +169,11 @@ int fimc_hwset_output_area_size(struct fimc_control *ctrl, u32 size)
 
 void fimc_wait_disable_capture(struct fimc_control *ctrl)
 {
+#ifdef CONFIG_VIDEO_S5K4ECGX
+	unsigned long timeo = jiffies + 60; /* more 40 ms */
+#else
 	unsigned long timeo = jiffies + 20; /* timeout of 100 ms */
+#endif
 	u32 cfg;
 
 	if (!ctrl || !ctrl->cap ||

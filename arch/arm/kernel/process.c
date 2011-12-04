@@ -107,6 +107,7 @@ void arm_machine_restart(char mode, const char *cmd)
 	kernel_sec_clear_upload_magic_number();
 #endif
 	writel(0x12345678, S5P_INFORM5);  /* Reset */
+	writel(readl(S5P_INFORM6) & 0xFFFF00FF, S5P_INFORM6);
 #endif
 
 	/*
@@ -315,14 +316,15 @@ void __show_regs(struct pt_regs *regs)
 		regs->ARM_r3, regs->ARM_r2,
 		regs->ARM_r1, regs->ARM_r0);
 
-#ifdef CONFIG_KERNEL_DEBUG_SEC
+#ifdef CONFIG_KERNEL_DEBUG_SEC	
 	/*
 	 *  Overwrite SVC context which the error just occurs from regs
 	 * (tkHWANG)
 	 */
 	memcpy((void*)&kernel_sec_core_ureg_dump, (void*)(regs),
 			sizeof(kernel_sec_core_ureg_dump));
-#endif
+#endif		
+	
 	flags = regs->ARM_cpsr;
 	buf[0] = flags & PSR_N_BIT ? 'N' : 'n';
 	buf[1] = flags & PSR_Z_BIT ? 'Z' : 'z';

@@ -50,14 +50,24 @@ snd-soc-wm8978-objs := wm8978.o
 snd-soc-wm8988-objs := wm8988.o
 snd-soc-wm8990-objs := wm8990.o
 snd-soc-wm8993-objs := wm8993.o
-ifeq ($(CONFIG_SND_SOC_WM8994_VICTORY),y)
-snd-soc-wm8994-objs := victory/wm8994_samsung.o victory/wm8994_aries.o
+ifeq ($(CONFIG_MACH_STEALTHV),y)
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_stealthv.o
+ifeq ($(CONFIG_SND_SOC_A1026),y)
+snd-soc-a1026-objs := A1026_i2c_drv.o
 endif
-ifeq ($(CONFIG_SND_SOC_WM8994_ATLAS),y)
-ifeq ($(CONFIG_S5PV210_GARNETT_DELTA),y)
-snd-soc-wm8994-objs := garnett/wm8994_samsung.o garnett/wm8994_aries.o
 else
-snd-soc-wm8994-objs := atlas/wm8994_samsung.o atlas/wm8994_aries.o
+ifeq ($(CONFIG_MACH_AEGIS),y)
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_aegis.o
+else
+ifeq ($(CONFIG_MACH_VIPER),y)
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_viper.o
+else
+ifeq ($(CONFIG_MACH_CHIEF),y)
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_chief.o
+else
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_aries.o
+endif
+endif
 endif
 endif
 snd-soc-wm9081-objs := wm9081.o
@@ -125,6 +135,9 @@ obj-$(CONFIG_SND_SOC_WM8988)	+= snd-soc-wm8988.o
 obj-$(CONFIG_SND_SOC_WM8990)	+= snd-soc-wm8990.o
 obj-$(CONFIG_SND_SOC_WM8993)	+= snd-soc-wm8993.o
 obj-$(CONFIG_SND_SOC_WM8994)	+= snd-soc-wm8994.o
+ifeq ($(CONFIG_SND_SOC_A1026),y)
+obj-$(CONFIG_SND_SOC_WM8994)	+= snd-soc-a1026.o
+endif
 obj-$(CONFIG_SND_SOC_WM9081)	+= snd-soc-wm9081.o
 obj-$(CONFIG_SND_SOC_WM9705)	+= snd-soc-wm9705.o
 obj-$(CONFIG_SND_SOC_WM9712)	+= snd-soc-wm9712.o

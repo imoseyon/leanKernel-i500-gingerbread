@@ -140,7 +140,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 		 * TODO : debugLevel considerationi should be done. (tkhwang)
 		 *        bluescreen display will be necessary.
 		 */
-		kernel_sec_set_cp_upload();
+		kernel_sec_set_cp_upload(); 
 		kernel_sec_save_final_context();
 		if (0 == strcmp(fmt, "User Fault\n"))
 			kernel_sec_set_upload_cause(UPLOAD_CAUSE_USER_FAULT);
@@ -173,17 +173,17 @@ NORET_TYPE void panic(const char * fmt, ...)
 	}
 #endif
 	local_irq_enable();
-#ifndef CONFIG_KERNEL_DEBUG_SEC
+#ifndef CONFIG_KERNEL_DEBUG_SEC	
 	while (1) {
 		touch_softlockup_watchdog();
 		panic_blink_one_second();
 	}
 #else
 	/*
-	* TODO : debugLevel considerationi should be done. (tkhwang)
-	*        bluescreen display will be necessary.
-	*/
-	kernel_sec_set_cp_upload();
+	 * TODO : debugLevel considerationi should be done. (tkhwang)
+	 *        bluescreen display will be necessary.
+	 */
+	kernel_sec_set_cp_upload(); 
 	kernel_sec_save_final_context();
 	if (0 == strcmp(fmt, "User Fault\n"))
 		kernel_sec_set_upload_cause(UPLOAD_CAUSE_USER_FAULT);
@@ -191,7 +191,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 		kernel_sec_set_upload_cause(UPLOAD_CAUSE_KERNEL_PANIC);
 
 	kernel_sec_hw_reset(false);
-#endif
+#endif		
 }
 
 EXPORT_SYMBOL(panic);

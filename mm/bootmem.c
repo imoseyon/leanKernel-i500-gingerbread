@@ -638,10 +638,7 @@ find_block:
 
 		region = phys_to_virt(PFN_PHYS(bdata->node_min_pfn) +
 				start_off);
-		if( (virt_to_phys(region)!= 0x4FC00000) && (virt_to_phys(region)!= 0x4F800000) )
-			memset(region, 0, size);
-		else
-			printk("skiping memset of 0x%x used by FB\n", (virt_to_phys(region)));
+		memset(region, 0, size);
 		/*
 		 * The min_count is set to 0 so that bootmem allocated blocks
 		 * are never reported as leaks.

@@ -38,23 +38,9 @@ obj-$(CONFIG_WL127X_RFKILL)	+= wl127x-rfkill.o
 obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_SENSORS_AK8975)	+= akm8975.o
 obj-$(CONFIG_PN544)		+= pn544.o
-obj-$(CONFIG_VIBETONZ)          += vibetonz/
-ifeq ($(CONFIG_MACH_ATLAS),y)
-ifeq ($(CONFIG_S5PV210_GARNETT_DELTA),y)
-obj-$(CONFIG_SAMSUNG_JACK)      += atlas/sec_jack_garnett.o
-else
-obj-$(CONFIG_SAMSUNG_JACK)      += atlas/sec_jack.o
-endif
-else
-ifeq ($(CONFIG_MACH_FORTE),y)
-obj-$(CONFIG_SAMSUNG_JACK)      += sec_jack_forte.o
-else
-obj-$(CONFIG_SAMSUNG_JACK)      += sec_jack.o
-endif
-endif
+obj-$(CONFIG_SAMSUNG_JACK)	+= sec_jack.o
 obj-$(CONFIG_USB_SWITCH_FSA9480)	+= fsa9480.o
-obj-$(CONFIG_PARAM)		+=param/
-obj-$(CONFIG_LEVEL)             += level/
-ifeq ($(CONFIG_S5PV210_GARNETT_DELTA), y)
-obj-$(CONFIG_GRIP_SENSOR_AGS04) +=ags04.o ags04_dev.o ags04_i2c.o
-endif
+obj-$(CONFIG_SAMSUNG_MODEMCTL)	+= samsung_modemctl/
+obj-$(CONFIG_SAMSUNG_FM_SI4709)		+= fm_si4709/
+obj-$(CONFIG_VIBETONZ)		+= vibetonz/
+obj-$(CONFIG_LEVEL)			+= level/

@@ -170,11 +170,11 @@ int s3cfb_set_clock(struct s3cfb_global *ctrl)
 	if (strcmp(pdata->clk_name, "sclk_fimd") == 0) {
 		cfg |= S3C_VIDCON0_CLKSEL_SCLK;
 		src_clk = clk_get_rate(ctrl->clock);
-		printk(KERN_INFO "FIMD src sclk = %d\n", src_clk);
+//		printk(KERN_INFO "FIMD src sclk = %d\n", src_clk);
 	} else {
 		cfg |= S3C_VIDCON0_CLKSEL_HCLK;
 		src_clk = ctrl->clock->parent->rate;
-		printk(KERN_INFO "FIMD src hclk = %d\n", src_clk);
+//		printk(KERN_INFO "FIMD src hclk = %d\n", src_clk);
 	}
 
 	vclk = ctrl->fb[pdata->default_win]->var.pixclock;
@@ -209,7 +209,19 @@ int s3cfb_set_polarity(struct s3cfb_global *ctrl)
 
 	pol = &ctrl->lcd->polarity;
 	cfg = 0;
+#if defined(CONFIG_MACH_VIPER) || defined(CONFIG_MACH_CHIEF)
+	if (pol->rise_vclk)
+		cfg |= S3C_VIDCON1_IVCLK_FALLING_EDGE;
 
+	if (pol->inv_hsync)
+		cfg |= S3C_VIDCON1_IHSYNC_NORMAL;
+
+	if (pol->inv_vsync)
+		cfg |= S3C_VIDCON1_IVSYNC_NORMAL;
+
+	if (pol->inv_vden)
+		cfg |= S3C_VIDCON1_IVDEN_NORMAL;
+#else
 	if (pol->rise_vclk)
 		cfg |= S3C_VIDCON1_IVCLK_RISING_EDGE;
 
@@ -221,7 +233,7 @@ int s3cfb_set_polarity(struct s3cfb_global *ctrl)
 
 	if (pol->inv_vden)
 		cfg |= S3C_VIDCON1_IVDEN_INVERT;
-
+#endif
 	writel(cfg, ctrl->regs + S3C_VIDCON1);
 
 	return 0;

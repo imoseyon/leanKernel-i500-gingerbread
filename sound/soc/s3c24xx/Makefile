@@ -25,7 +25,7 @@ obj-$(CONFIG_SND_S5PC1XX_SOC_I2S) += snd-soc-s5p-i2s_sec.o
 obj-$(CONFIG_SND_S3C64XX_SOC_I2S_V4) += snd-soc-s3c64xx-i2s-v4.o
 obj-$(CONFIG_SND_S3C_I2SV2_SOC) += snd-soc-s3c-i2s-v2.o
 obj-$(CONFIG_SND_S3C_SOC_PCM) += snd-soc-s3c-pcmdev.o
-#obj-$(CONFIG_SND_S3C_SOC_PCM) += snd-soc-s3c-dma-pcm.o
+obj-$(CONFIG_SND_S3C_SOC_PCM) += snd-soc-s3c-dma-pcm.o
 
 # S3C24XX Machine Support
 snd-soc-jive-wm8750-objs := jive_wm8750.o
@@ -40,8 +40,7 @@ snd-soc-s3c24xx-simtec-tlv320aic23-objs := s3c24xx_simtec_tlv320aic23.o
 snd-soc-smdk64xx-wm8580-objs := smdk64xx_wm8580.o
 snd-soc-smdk-wm9713-objs := smdk_wm9713.o
 
-snd-soc-herring-wm8994-objs := herring-wm8994.o
-snd-soc-aries-wm8994-objs := aries-wm8994.o
+snd-soc-s5pc1xx-wm8994-objs := s5pc1xx-wm8994.o
 snd-soc-s5pc1xx-pcm-wm8994-objs := s5pc1xx-pcm-wm8994.o
 
 obj-$(CONFIG_SND_S3C24XX_SOC_JIVE_WM8750) += snd-soc-jive-wm8750.o
@@ -54,6 +53,6 @@ obj-$(CONFIG_SND_S3C24XX_SOC_SIMTEC) += snd-soc-s3c24xx-simtec.o
 obj-$(CONFIG_SND_S3C24XX_SOC_SIMTEC_HERMES) += snd-soc-s3c24xx-simtec-hermes.o
 obj-$(CONFIG_SND_S3C24XX_SOC_SIMTEC_TLV320AIC23) += snd-soc-s3c24xx-simtec-tlv320aic23.o
 obj-$(CONFIG_SND_S3C64XX_SOC_WM8580) += snd-soc-smdk64xx-wm8580.o
-obj-$(CONFIG_SND_S5P_WM8994)  += snd-soc-aries-wm8994.o
+obj-$(CONFIG_SND_S5P_WM8994)  += snd-soc-s5pc1xx-wm8994.o
 obj-$(CONFIG_SND_SOC_SMDK_WM9713) += snd-soc-smdk-wm9713.o
 obj-$(CONFIG_SND_C110_PCM)	+= snd-soc-s5pc1xx-pcm-wm8994.o

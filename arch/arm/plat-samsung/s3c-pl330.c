@@ -469,7 +469,6 @@ static inline int s3c_pl330_submit(struct s3c_pl330_chan *ch,
 
 		r->x = NULL;
 
-
 		/* If both of the PL330 ping-pong buffers filled */
 		if (ret == -EAGAIN) {
 			dev_err(ch->dmac->pi->dev, "%s:%d!\n",
@@ -741,8 +740,6 @@ enq_exit:
 	return ret;
 }
 
-
-
 int s3c2410_dma_enqueue(enum dma_ch id, void *token,
 			dma_addr_t addr, int size)
 {
@@ -825,6 +822,7 @@ int s3c2410_dma_request(enum dma_ch id,
 	int ret = 0;
 
 	spin_lock_irqsave(&res_lock, flags);
+
 	ch = chan_acquire(id);
 	if (!ch) {
 		ret = -EBUSY;

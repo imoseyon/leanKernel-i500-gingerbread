@@ -93,6 +93,14 @@ static struct sleep_save core_save[] = {
 	SAVE_ITEM(S3C2410_TCNTB(0)),
 	SAVE_ITEM(S3C2410_TCMPB(0)),
 	SAVE_ITEM(S3C2410_TCNTO(0)),
+
+	SAVE_ITEM(S5P_SROM_BW),
+	SAVE_ITEM(S5P_SROM_BC0),
+	SAVE_ITEM(S5P_SROM_BC1),
+	SAVE_ITEM(S5P_SROM_BC2),
+	SAVE_ITEM(S5P_SROM_BC3),
+	SAVE_ITEM(S5P_SROM_BC4),
+	SAVE_ITEM(S5P_SROM_BC5),
 };
 
 void s5pv210_cpu_suspend(void)
@@ -162,4 +170,3 @@ static __init int s5pv210_pm_drvinit(void)
 }
 
 arch_initcall(s5pv210_pm_drvinit);
-

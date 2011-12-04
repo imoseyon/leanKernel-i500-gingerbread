@@ -31,7 +31,7 @@
 #define subdev_call(ctrl, o, f, args...) \
 	v4l2_subdev_call(ctrl->cam->sd, o, f, ##args)
 
-/* #define FIMC_CAP_DEBUG */
+// #define FIMC_CAP_DEBUG
 
 #ifdef FIMC_CAP_DEBUG
 #ifdef fimc_dbg
@@ -41,7 +41,6 @@
 #endif
 
 static int vtmode = 0;
-static int device_id = 0;
 
 static const struct v4l2_fmtdesc capture_fmts[] = {
 	{
@@ -202,7 +201,6 @@ void s3c_csis_start(int lanes, int settle, int align, int width, int height,
 
 static int fimc_camera_init(struct fimc_control *ctrl)
 {
-	struct fimc_global *fimc = get_fimc_dev();
 	int ret;
 
 	fimc_dbg("%s\n", __func__);
@@ -260,39 +258,33 @@ static int fimc_camera_start(struct fimc_control *ctrl)
 {
 	struct v4l2_frmsizeenum cam_frmsize;
 	struct v4l2_control cam_ctrl;
-	struct fimc_global *fimc = get_fimc_dev();
 	int ret;
+
 	ret = subdev_call(ctrl, video, enum_framesizes, &cam_frmsize);
 	if (ret < 0) {
 		fimc_err("%s: enum_framesizes failed\n", __func__);
 		if (ret != -ENOIOCTLCMD)
 			return ret;
 	} else {
-		if (ctrl->vt_mode == 1 && fimc->active_camera != 0 && (ctrl->cap->rotate == 90 || ctrl->cap->rotate == 270)) {
-			ctrl->cam->window.left = 136;
-			ctrl->cam->window.top = 0;
-			ctrl->cam->window.width = 368;
-			ctrl->cam->window.height = 480;
+		if (vtmode == 1 && (ctrl->cap->rotate == 90 || ctrl->cap->rotate == 270)){
+                    ctrl->cam->window.left = 144;
+                    ctrl->cam->window.top = 0;
+                    ctrl->cam->window.width = 368;
+                    ctrl->cam->window.height = 480;
+                    ctrl->cam->width = cam_frmsize.discrete.width;
+                    ctrl->cam->height = cam_frmsize.discrete.height;
+                    dev_err(ctrl->dev, "vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n",
+                                ctrl->cap->rotate, ctrl->cam->width, ctrl->cam->height);
+		}else{	
 			ctrl->cam->width = cam_frmsize.discrete.width;
 			ctrl->cam->height = cam_frmsize.discrete.height;
-			fimc_err("vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n", ctrl->cap->rotate, ctrl->cam->width, ctrl->cam->height);
-		} else if (fimc->active_camera != 0) {
-			ctrl->cam->window.left = 136;
-			ctrl->cam->window.top = 0;
-			ctrl->cam->window.width = 368;
-			ctrl->cam->window.height = 480;
-			ctrl->cam->width = cam_frmsize.discrete.width;
-			ctrl->cam->height = cam_frmsize.discrete.height;
-			fimc_err("%s, crop(368x480), vtmode = 0, device = front, cam->width = %d, cam->height = %d\n", __func__, ctrl->cam->width, ctrl->cam->height);
-		} else {		
+
 			ctrl->cam->window.left = 0;
 			ctrl->cam->window.top = 0;
 			ctrl->cam->window.width = ctrl->cam->width;
 			ctrl->cam->window.height = ctrl->cam->height;
-			fimc_err("%s, vtmode = %d, device = %d, cam->width = %d, cam->height = %d\n", __func__, ctrl->vt_mode, fimc->active_camera, ctrl->cam->width, ctrl->cam->height);
-			
 		}
-	}
+       }
 
 	cam_ctrl.id = V4L2_CID_CAM_PREVIEW_ONOFF;
 	cam_ctrl.value = 1;
@@ -467,6 +459,8 @@ int fimc_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 		return -ENODEV;
 	}
 
+	ctrl->capture_mode = a->parm.capture.capturemode; //Arun SISO add sensor state
+	
 	mutex_lock(&ctrl->v4l2_lock);
 	if (ctrl->id != 2)
 		ret = subdev_call(ctrl, video, s_parm, a);
@@ -532,7 +526,7 @@ int fimc_enum_input(struct file *file, void *fh, struct v4l2_input *inp)
 
 	if (!fimc->camera_isvalid[inp->index])
 		return -EINVAL;
-
+        
 	strcpy(inp->name, fimc->camera[inp->index].info->type);
 	inp->type = V4L2_INPUT_TYPE_CAMERA;
 
@@ -568,8 +562,10 @@ int fimc_release_subdev(struct fimc_control *ctrl)
 		client = v4l2_get_subdevdata(ctrl->cam->sd);
 		i2c_unregister_device(client);
 		ctrl->cam->sd = NULL;
+        
 		if (ctrl->cam->cam_power)
 			ctrl->cam->cam_power(0);
+        
 		ctrl->cam->initialized = 0;
 		ctrl->cam = NULL;
 		fimc->active_camera = -1;
@@ -637,10 +633,17 @@ int fimc_s_input(struct file *file, void *fh, unsigned int i)
 {
 	struct fimc_global *fimc = get_fimc_dev();
 	struct fimc_control *ctrl = ((struct fimc_prv_data *)fh)->ctrl;
+	struct fimc_capinfo *cap = ctrl->cap;    
 	int ret = 0;
 
 	fimc_dbg("%s: index %d\n", __func__, i);
-
+#if defined(CONFIG_MACH_AEGIS) || defined(CONFIG_MARCH_VIPER)
+	if (i == 1000) {
+		dev_err(ctrl->dev, "ESD code is running\n");
+		fimc_release_subdev(ctrl);
+		i = 0;
+	}
+#endif
 	if (i < 0 || i >= FIMC_MAXCAMS) {
 		fimc_err("%s: invalid input index\n", __func__);
 		return -EINVAL;
@@ -654,7 +657,7 @@ int fimc_s_input(struct file *file, void *fh, unsigned int i)
 		return -EBUSY;
 	}
 
-	mutex_lock(&ctrl->v4l2_lock);
+	mutex_lock(&ctrl->v4l2_lock);    
 	/* If ctrl->cam is not NULL, there is one subdev already registered.
 	 * We need to unregister that subdev first.
 	 */
@@ -678,6 +681,25 @@ int fimc_s_input(struct file *file, void *fh, unsigned int i)
 			mutex_unlock(&ctrl->v4l2_lock);
 			return -EINVAL;
 		}
+	}
+
+	/*
+	 * The first time alloc for struct cap_info, and will be
+	 * released at the file close.
+	 * Anyone has better idea to do this?
+	*/
+	if (!cap) {
+		cap = kzalloc(sizeof(*cap), GFP_KERNEL);
+		if (!cap) {
+			fimc_err("%s: no memory for "
+				"capture device info\n", __func__);
+			return -ENOMEM;
+		}
+
+		/* assign to ctrl */
+		ctrl->cap = cap;
+	} else {
+		memset(cap, 0, sizeof(*cap));
 	}
 
 	mutex_unlock(&ctrl->v4l2_lock);
@@ -878,12 +900,23 @@ int fimc_s_fmt_vid_capture(struct file *file, void *fh, struct v4l2_format *f)
 	} else {
 		cap->fmt.bytesperline = (cap->fmt.width * depth) >> 3;
 		cap->fmt.sizeimage = (cap->fmt.bytesperline * cap->fmt.height);
-	}
+	}    
 
 	if (cap->fmt.colorspace == V4L2_COLORSPACE_JPEG) {
 		ctrl->sc.bypass = 1;
 		cap->lastirq = 1;
 	}
+
+         // cmk 2010.10.20 sensor power on and init should be done before s_fmt.      
+        if(!ctrl->cam->initialized)
+        {
+            ret = fimc_camera_init(ctrl);
+            if(ret < 0){
+                mutex_unlock(&ctrl->v4l2_lock);
+                return ret;
+            }
+        } 
+        // end cmk
 
 	if (ctrl->id != 2)
 		ret = subdev_call(ctrl, video, s_fmt, f);
@@ -1172,7 +1205,25 @@ int fimc_s_ctrl_capture(void *fh, struct v4l2_control *c)
 	mutex_lock(&ctrl->v4l2_lock);
 
 	switch (c->id) {
-	case V4L2_CID_ROTATION:
+#if defined(CONFIG_MACH_STEALTHV)
+       case V4L2_CID_CAMERA_POWER_CONTROL:
+            mutex_unlock(&ctrl->v4l2_lock);
+                ctrl->cam->cam_power(c->value);
+                ctrl->cam->cam_power_flag = c->value;
+            mutex_lock(&ctrl->v4l2_lock);   
+            break;
+#endif            
+       case V4L2_CID_CAMERA_CAPTURE_MODE:
+	      ctrl->capture_mode = c->value;
+		mutex_unlock(&ctrl->v4l2_lock);
+		if (2 != ctrl->id)
+			ret = subdev_call(ctrl, core, s_ctrl, c);
+		else
+			ret = 0;
+		mutex_lock(&ctrl->v4l2_lock);          
+             break;
+             
+    	case V4L2_CID_ROTATION:
 		ctrl->cap->rotate = c->value;
 		break;
 
@@ -1223,12 +1274,12 @@ int fimc_s_ctrl_capture(void *fh, struct v4l2_control *c)
 		ctrl->fe.pat_cr = c->value & 0xFF;
 		ret = 0;
 		break;
-		
+        
 	case V4L2_CID_CAMERA_VT_MODE:
-		ctrl->vt_mode = c->value;
+		vtmode = c->value;
 		ret = subdev_call(ctrl, core, s_ctrl, c);
-		break;
-
+		break;		
+        
 	default:
 		/* try on subdev */
 		mutex_unlock(&ctrl->v4l2_lock);
@@ -1540,16 +1591,13 @@ int fimc_streamon_capture(void *fh)
 {
 	struct fimc_control *ctrl = ((struct fimc_prv_data *)fh)->ctrl;
 	struct fimc_capinfo *cap = ctrl->cap;
-	struct v4l2_frmsizeenum cam_frmsize;
-	struct fimc_global *fimc = get_fimc_dev();
-
+#if defined(CONFIG_MACH_STEALTHV)||defined(CONFIG_MACH_AEGIS)
+       struct v4l2_frmsizeenum cam_frmsize;
+#endif
 	int rot;
 	int ret;
-
+	
 	fimc_dbg("%s\n", __func__);
-	char *ce147 = "CE147 0-003c";
-	device_id = strcmp(ctrl->cam->sd->name, ce147);
-	fimc_dbg("%s, name(%s), device_id(%d), vtmode(%d)\n", __func__, ctrl->cam->sd->name , fimc->active_camera, ctrl->vt_mode);
 
 	if (!ctrl->cam || !ctrl->cam->sd) {
 		fimc_err("%s: No capture device.\n", __func__);
@@ -1573,40 +1621,41 @@ int fimc_streamon_capture(void *fh)
 
 	if (!ctrl->cam->initialized)
 		fimc_camera_init(ctrl);
-	
+#if defined(CONFIG_MACH_STEALTHV)||defined(CONFIG_MACH_AEGIS)
 	ret = subdev_call(ctrl, video, enum_framesizes, &cam_frmsize);
 	if (ret < 0) {
-		dev_err(ctrl->dev, "%s: enum_framesizes failed\n", __func__);
-		if(ret != -ENOIOCTLCMD)
+		fimc_err("%s: enum_framesizes failed\n", __func__);
+		if (ret != -ENOIOCTLCMD)
 			return ret;
 	} else {
-		if (ctrl->vt_mode == 1 && fimc->active_camera != 0 && (cap->rotate == 90 || cap->rotate == 270)) {
-		ctrl->cam->window.left = 136;
-			ctrl->cam->window.top = 0;//
+		if (vtmode == 1 && (cap->rotate == 90 || cap->rotate == 270))
+		{
+			ctrl->cam->window.left = 144;
+			ctrl->cam->window.top = 0;
 			ctrl->cam->window.width = 368;
 			ctrl->cam->window.height = 480;
 			ctrl->cam->width = cam_frmsize.discrete.width;
 			ctrl->cam->height = cam_frmsize.discrete.height;
-			fimc_err("vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n", cap->rotate, ctrl->cam->width, ctrl->cam->height);
-		} else if (fimc->active_camera != 0) {
-			ctrl->cam->window.left = 136;
-			ctrl->cam->window.top = 0;
-			ctrl->cam->window.width = 368;
-			ctrl->cam->window.height = 480;
+			dev_err(ctrl->dev, "vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n",
+                                 cap->rotate, ctrl->cam->width, ctrl->cam->height);
+		}else{	
 			ctrl->cam->width = cam_frmsize.discrete.width;
-			ctrl->cam->height =cam_frmsize.discrete.height;
-			fimc_err("%s, crop(368x480), vtmode = 0, device = front, cam->width = %d, cam->height = %d\n", __func__, ctrl->cam->width, ctrl->cam->height);
-		} else {
+			ctrl->cam->height = cam_frmsize.discrete.height;
+
 			ctrl->cam->window.left = 0;
 			ctrl->cam->window.top = 0;
-			ctrl->cam->width = ctrl->cam->window.width = cam_frmsize.discrete.width;
-			ctrl->cam->height = ctrl->cam->window.height = cam_frmsize.discrete.height;
-			fimc_err("%s, vtmode = %d, device = %d, cam->width = %d, cam->height = %d\n", __func__, ctrl->vt_mode, fimc->active_camera, ctrl->cam->width, ctrl->cam->height);
-		}
+			ctrl->cam->window.width = ctrl->cam->width;
+			ctrl->cam->window.height = ctrl->cam->height;
+            }
 	}
 
+        printk("%s: camera sensor state: %d (0: preview, 1: capture)\n", __func__, ctrl->capture_mode);
+
+       if(ctrl->capture_mode == V4L2_MODE_PREVIEW){// Arun-SISO add sensor state
+#else        
 	if (ctrl->id != 2 &&
 			ctrl->cap->fmt.colorspace != V4L2_COLORSPACE_JPEG) {
+#endif
 		ret = fimc_camera_start(ctrl);
 		if (ret < 0) {
 			fimc_reset_capture(ctrl);
@@ -1639,11 +1688,6 @@ int fimc_streamon_capture(void *fh)
 
 		fimc_hwset_output_size(ctrl, cap->fmt.width, cap->fmt.height);
 
-		if ((fimc->active_camera != 0)) {
-			ctrl->cap->rotate = 90;
-			dev_err(ctrl->dev, "%s, rotate 90", __func__);
-		}
-
 		fimc_hwset_output_scan(ctrl, &cap->fmt);
 		fimc_hwset_output_rot_flip(ctrl, cap->rotate, cap->flip);
 		rot = fimc_mapping_rot_flip(cap->rotate, cap->flip);
@@ -1662,13 +1706,17 @@ int fimc_streamon_capture(void *fh)
 		fimc_hwset_jpeg_mode(ctrl, true);
 	}
 
-	if (ctrl->cap->fmt.colorspace == V4L2_COLORSPACE_JPEG)
+	if (ctrl->cap->fmt.colorspace == V4L2_COLORSPACE_JPEG){
 		fimc_hwset_scaler_bypass(ctrl);
+	       fimc_start_capture(ctrl);
+       }
 
-	fimc_start_capture(ctrl);
-
+#if defined(CONFIG_MACH_STEALTHV)||defined(CONFIG_MACH_AEGIS)
+       if(ctrl->capture_mode == V4L2_MODE_CAPTURE){// Arun-SISO add sensor state 
+#else
 	if (ctrl->cap->fmt.colorspace == V4L2_COLORSPACE_JPEG &&
 			ctrl->id != 2) {
+#endif	
 		struct v4l2_control cam_ctrl;
 
 		cam_ctrl.id = V4L2_CID_CAM_CAPTURE;
@@ -1681,7 +1729,9 @@ int fimc_streamon_capture(void *fh)
 			return -EPERM;
 		}
 	}
-
+       if (ctrl->cap->fmt.colorspace != V4L2_COLORSPACE_JPEG){
+            fimc_start_capture(ctrl);
+       }
 	ctrl->status = FIMC_STREAMON;
 
 	mutex_unlock(&ctrl->v4l2_lock);

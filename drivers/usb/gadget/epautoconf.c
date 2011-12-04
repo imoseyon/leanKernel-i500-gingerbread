@@ -187,6 +187,152 @@ ep_matches (
 	return 1;
 }
 
+#ifdef CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+/*
+ * This should work with endpoints from controller drivers sharing the
+ * same endpoint naming convention.  By example:
+ *
+ *	- ep1, ep2, ... address is fixed, not direction or type
+ *	- ep1in, ep2out, ... address and direction are fixed, not type
+ *	- ep1-bulk, ep2-bulk, ... address and type are fixed, not direction
+ *	- ep1in-bulk, ep2out-iso, ... all three are fixed
+ *	- ep-* ... no functionality restrictions
+ *
+ * Type suffixes are "-bulk", "-iso", or "-int".  Numbers are decimal.
+ * Less common restrictions are implied by gadget_is_*().
+ *
+ * NOTE:  each endpoint is unidirectional, as specified by its USB
+ * descriptor; and isn't specific to a configuration or altsetting.
+ */
+static int
+shared_ep_matches (
+	struct usb_gadget		*gadget,
+	struct usb_ep			*ep,
+	struct usb_endpoint_descriptor	*desc,
+	unsigned fix_epnum
+)
+{
+	u8		type;
+	const char	*tmp;
+	u16		max;
+
+	/* endpoint already claimed? */
+	if (NULL != ep->driver_data)
+       {   
+                printk(KERN_INFO"[shared_ep_matches] enpoint aleray allocated \r\n");
+		//return 0;
+       }
+
+	/* only support ep0 for portable CONTROL traffic */
+	type = desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
+	if (USB_ENDPOINT_XFER_CONTROL == type)
+		return 0;
+
+	/* some other naming convention */
+	if ('e' != ep->name[0])
+		return 0;
+
+	/* type-restriction:  "-iso", "-bulk", or "-int".
+	 * direction-restriction:  "in", "out".
+	 */
+	if ('-' != ep->name[2]) {
+		tmp = strrchr (ep->name, '-');
+		if (tmp) {
+			switch (type) {
+			case USB_ENDPOINT_XFER_INT:
+				/* bulk endpoints handle interrupt transfers,
+				 * except the toggle-quirky iso-synch kind
+				 */
+				if ('s' == tmp[2])	// == "-iso"
+					return 0;
+				/* for now, avoid PXA "interrupt-in";
+				 * it's documented as never using DATA1.
+				 */
+				if (gadget_is_pxa (gadget)
+						&& 'i' == tmp [1])
+					return 0;
+				break;
+			case USB_ENDPOINT_XFER_BULK:
+				if ('b' != tmp[1])	// != "-bulk"
+					return 0;
+				break;
+			case USB_ENDPOINT_XFER_ISOC:
+				if ('s' != tmp[2])	// != "-iso"
+					return 0;
+			}
+		} else {
+			tmp = ep->name + strlen (ep->name);
+		}
+
+		/* direction-restriction:  "..in-..", "out-.." */
+		tmp--;
+		if (!isdigit (*tmp)) {
+			if (desc->bEndpointAddress & USB_DIR_IN) {
+				if ('n' != *tmp)
+					return 0;
+			} else {
+				if ('t' != *tmp)
+					return 0;
+			}
+		}
+	}
+
+	/* endpoint maxpacket size is an input parameter, except for bulk
+	 * where it's an output parameter representing the full speed limit.
+	 * the usb spec fixes high speed bulk maxpacket at 512 bytes.
+	 */
+	max = 0x7ff & le16_to_cpu(desc->wMaxPacketSize);
+	switch (type) {
+	case USB_ENDPOINT_XFER_INT:
+		/* INT:  limit 64 bytes full speed, 1024 high speed */
+		if (!gadget->is_dualspeed && max > 64)
+			return 0;
+		/* FALLTHROUGH */
+
+	case USB_ENDPOINT_XFER_ISOC:
+		/* ISO:  limit 1023 bytes full speed, 1024 high speed */
+		if (ep->maxpacket < max)
+			return 0;
+		if (!gadget->is_dualspeed && max > 1023)
+			return 0;
+
+		/* BOTH:  "high bandwidth" works only at high speed */
+		if ((desc->wMaxPacketSize & cpu_to_le16(3<<11))) {
+			if (!gadget->is_dualspeed)
+				return 0;
+			/* configure your hardware with enough buffering!! */
+		}
+		break;
+	}
+
+	/* MATCH!! */
+
+	/* report address */
+	desc->bEndpointAddress &= USB_DIR_IN;
+	if (isdigit (ep->name [2])) {
+		u8	num = simple_strtoul (&ep->name [2], NULL, 10);
+		desc->bEndpointAddress |= num;
+#ifdef	MANY_ENDPOINTS
+	} else if (desc->bEndpointAddress & USB_DIR_IN) {
+	        
+		desc->bEndpointAddress = USB_DIR_IN | fix_epnum;
+#endif
+	} else {
+		desc->bEndpointAddress |= fix_epnum;
+	}
+	/* report (variable) full speed bulk maxpacket */
+	if (USB_ENDPOINT_XFER_BULK == type) {
+		int size = ep->maxpacket;
+
+		/* min() doesn't work on bitfields with gcc-3.5 */
+		if (size > 64)
+			size = 64;
+		desc->wMaxPacketSize = cpu_to_le16(size);
+	}
+	return 1;
+}
+#endif
+
 static struct usb_ep *
 find_ep (struct usb_gadget *gadget, const char *name)
 {
@@ -296,12 +442,6 @@ struct usb_ep *usb_ep_autoconfig (
 			ep = find_ep (gadget, "ep9-int");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : It is refered from S1. samsung composite used many ep */
-			ep = find_ep (gadget, "ep12-int");
-			if (ep && ep_matches (gadget, ep, desc))
-				return ep;
-#endif
 		} else if (USB_ENDPOINT_XFER_BULK == type
 				&& (USB_DIR_IN & desc->bEndpointAddress)) {
 			ep = find_ep (gadget, "ep2-bulk");
@@ -313,11 +453,13 @@ struct usb_ep *usb_ep_autoconfig (
 			ep = find_ep (gadget, "ep8-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : It is refered from S1. samsung composite used many ep */
 			ep = find_ep (gadget, "ep11-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
+			ep = find_ep (gadget, "ep12-bulk");
+			if (ep && ep_matches (gadget, ep, desc))
+				return ep;
+#ifndef  CONFIG_USB_ANDRPID_SHARE_ENDPOINT
 			ep = find_ep (gadget, "ep14-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
@@ -331,17 +473,19 @@ struct usb_ep *usb_ep_autoconfig (
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep7-bulk");
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : It is refered from S1. samsung composite used many ep */
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep10-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep13-bulk");
-#endif
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
+#ifndef CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+			ep = find_ep (gadget, "ep15-bulk");
+			if (ep && ep_matches (gadget, ep, desc))
+				return ep;
+#endif
 		}
 	}
 
@@ -376,4 +520,46 @@ void usb_ep_autoconfig_reset (struct usb_gadget *gadget)
 #endif
 	epnum = 0;
 }
+
+#ifdef CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+/**
+ * usb_ep_fixedconfig_alloc - share endpoint
+ * @gadget: device for which some function
+ *
+ * Stealth-V/Aegis need 19 endpoint, we need to share endpoint
+ * Stealth-V/Aegis  :  MTP, DM2(NMEA),Accessory share 2 bulk endpoint 
+ */
+ struct usb_ep *usb_ep_fixedconfig_alloc (
+	struct usb_gadget		*gadget,
+	struct usb_endpoint_descriptor	*desc
+)
+{
+    struct usb_ep	*ep;
+    u8		type;
+
+    type = desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
+    if (gadget_is_s3c(gadget))
+    {
+            if (USB_ENDPOINT_XFER_INT == type) {
+            /* single buffering is enough */
+
+            } else if (USB_ENDPOINT_XFER_BULK == type
+                        && (USB_DIR_IN & desc->bEndpointAddress)) {
+                        
+                ep = find_ep (gadget, "ep14-bulk");
+                if (ep && shared_ep_matches (gadget, ep, desc,14))
+                return ep;
+                
+                }
+            else if (USB_ENDPOINT_XFER_BULK == type
+                        && !(USB_DIR_IN & desc->bEndpointAddress)) {
+            
+            ep = find_ep (gadget, "ep15-bulk");
+            if (ep && shared_ep_matches (gadget, ep, desc,15))
+            return ep;
+            
+            }
+    }
+}
+#endif
 

@@ -62,7 +62,7 @@ typedef enum {
 } param_idx;
 
 char gkernel_sec_build_info[100];
-extern unsigned int system_rev;
+extern unsigned int HWREV;
 unsigned char kernel_sec_cause_str[KERNEL_SEC_DEBUG_CAUSE_STR_LEN];
 
 /*
@@ -75,50 +75,35 @@ __used t_kernel_sec_mmu_info           kernel_sec_mmu_reg_dump;
 __used kernel_sec_upload_cause_type     gkernel_sec_upload_cause;
 
 volatile void __iomem *dpram_base = 0;
-volatile unsigned int *onedram_sem;
 /* received mail */
-volatile unsigned int *onedram_mailboxAB;
+volatile unsigned short *dpram_mailboxAB;
 /* send mail */
-volatile unsigned int *onedram_mailboxBA;
+volatile unsigned short *dpram_mailboxBA;
 unsigned int received_cp_ack = 0;
 
 extern void (*sec_set_param_value)(int idx, void *value);
 extern void (*sec_get_param_value)(int idx, void *value);
 
-unsigned int kernel_sec_cable_attach = 0;
-
-void kernel_sec_set_cable_attach(void)
-{
-	kernel_sec_cable_attach = 1;
-}
-EXPORT_SYMBOL(kernel_sec_set_cable_attach);
-
-void kernel_sec_clear_cable_attach(void)
-{
-	kernel_sec_cable_attach = 0;
-}
-EXPORT_SYMBOL(kernel_sec_clear_cable_attach);
-
 void kernel_sec_set_cp_upload(void)
 {
 	unsigned int send_mail, wait_count;
 
-	send_mail = KERNEL_SEC_DUMP_AP_DEAD_INDICATOR;
+	send_mail = KERNEL_SEC_DUMP_AP_DEAD_INDICATOR_DPRAM;
 
-	*onedram_sem = 0x0;
-	*onedram_mailboxBA = send_mail;
+	*dpram_mailboxBA = send_mail;
 
 	printk(KERN_EMERG"[kernel_sec_dump_set_cp_upload] set cp upload mode, MailboxBA 0x%8x\n", send_mail);
 
 	wait_count = 0;
 	received_cp_ack = 0;
 	while (1) {
-		if (received_cp_ack == 1 || *onedram_mailboxAB == KERNEL_SEC_DUMP_AP_DEAD_ACK) {
+		//if (received_cp_ack == 1 || *dpram_mailboxAB == KERNEL_SEC_DUMP_AP_DEAD_ACK) {
+		if (received_cp_ack == 1 || *dpram_mailboxAB == 0xc6) {
 			printk(KERN_EMERG"  - Done.\n");
 			break;
 		}
 		mdelay(10);
-		if (++wait_count > 500) {
+		if (++wait_count > 2000) {
 			printk(KERN_EMERG"  - Fail to set CP uploadmode.\n");
 			break;
 		}	
@@ -136,13 +121,8 @@ EXPORT_SYMBOL(kernel_sec_set_cp_ack);
 
 void kernel_sec_set_upload_magic_number(void)
 {
-
 	int *magic_virt_addr = (int *)LOKE_BOOT_USB_DWNLD_V_ADDR;
 
-#if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_VICTORY)
-	*magic_virt_addr = 0;
-	printk(KERN_EMERG"KERNEL:magic_number=0x%x DEBUG LEVEL low!!\n",*magic_virt_addr);
-#else
 	if ((KERNEL_SEC_DEBUG_LEVEL_MID == kernel_sec_get_debug_level()) || 
 			(KERNEL_SEC_DEBUG_LEVEL_HIGH == kernel_sec_get_debug_level())) {
 		*magic_virt_addr = LOKE_BOOT_USB_DWNLDMAGIC_NO; /* SET */
@@ -151,29 +131,8 @@ void kernel_sec_set_upload_magic_number(void)
 		*magic_virt_addr = 0;	
 		printk(KERN_EMERG"KERNEL:magic_number=0x%x DEBUG LEVEL low!!\n",*magic_virt_addr);
 	}
-#endif
 }
 EXPORT_SYMBOL(kernel_sec_set_upload_magic_number);
-
-#if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_VICTORY)
-void kernel_sec_set_upload_magic_number_final(void)
-{
-	int *magic_virt_addr = (int*) LOKE_BOOT_USB_DWNLD_V_ADDR;
-
-	if( (KERNEL_SEC_DEBUG_LEVEL_MID == kernel_sec_get_debug_level()) || 
-		  (KERNEL_SEC_DEBUG_LEVEL_HIGH == kernel_sec_get_debug_level()) )
-	{
-		*magic_virt_addr = LOKE_BOOT_USB_DWNLDMAGIC_NO; // SET
-		printk(KERN_EMERG"KERNEL:magic_number=0x%x SET_UPLOAD_MAGIC_NUMBER\n",*magic_virt_addr);
-	}
-	else
-	{
-		*magic_virt_addr = 0;	
-		printk(KERN_EMERG"KERNEL:magic_number=0x%x DEBUG LEVEL low!!\n",*magic_virt_addr);
-	}
-}
-EXPORT_SYMBOL(kernel_sec_set_upload_magic_number_final);
-#endif
 
 void kernel_sec_get_debug_level_from_boot(void)
 {
@@ -260,7 +219,7 @@ EXPORT_SYMBOL(kernel_sec_set_autotest);
 void kernel_sec_set_build_info(void)
 {
 	char *p = gkernel_sec_build_info;
-	sprintf(p,"ARIES_BUILD_INFO: system_rev: %x", system_rev);
+	sprintf(p,"ARIES_BUILD_INFO: HWREV: %x", HWREV);
 	strcat(p, " Date:");
 	strcat(p, gkernel_sec_build_info_date_time[0]);
 	strcat(p, " Time:");
@@ -272,14 +231,14 @@ void kernel_sec_init(void)
 {
 	/* set the onedram mailbox virtual address */
 	/*DPRAM_START_ADDRESS_PHYS + DPRAM_SHARED_BANK + DPRAM_SMP*/
-	dpram_base = ioremap_nocache(0x30000000 + 0x05000000 + 0xFFF800, 0x60);
+	dpram_base = ioremap_nocache(0x98000000, 0x4000);
 
 	if (dpram_base == NULL) {
 		printk(KERN_EMERG"failed ioremap\n");
 	}
-	onedram_sem = dpram_base; 
-	onedram_mailboxAB = dpram_base + 0x20;
-	onedram_mailboxBA = dpram_base + 0x40;
+	printk(KERN_ERR "dpram_base virtual address : %x\n", dpram_base);
+	dpram_mailboxAB = dpram_base + 0x3FFC;
+	dpram_mailboxBA = dpram_base + 0x3FFE;
 
 	kernel_sec_get_debug_level_from_boot();
 	kernel_sec_set_upload_magic_number();
@@ -473,25 +432,11 @@ void kernel_sec_hw_reset(bool bSilentReset)
 		kernel_sec_clear_upload_magic_number();
 		printk(KERN_EMERG "(kernel_sec_hw_reset) Upload Magic Code is cleared for silet reset.\n");
 	}
-#if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_VICTORY) 
-	else
-	{
-		kernel_sec_set_upload_magic_number_final();
-		printk(KERN_EMERG "(kernel_sec_hw_reset) Upload Magic Code is set for Upload Mode.\n"); 
-#endif
-		if (gkernel_sec_upload_cause != UPLOAD_CAUSE_FORCED_UPLOAD){
-
-			if (kernel_sec_cable_attach)
-				kernel_sec_clear_upload_magic_number();
-		}
-#if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_VICTORY)		
-	} 
-#endif
 
 	printk(KERN_EMERG "(kernel_sec_hw_reset) %s\n", gkernel_sec_build_info);
 
 	printk(KERN_EMERG "(kernel_sec_hw_reset) The forced reset was called. The system will be reset !!\n");
-	
+
 	/* flush cache back to ram */
 	flush_cache_all();
 
@@ -649,56 +594,56 @@ EXPORT_SYMBOL(kernel_sec_check_debug_level_high);
 extern struct GAForensicINFO GAFINFO;
 static void dump_one_task_info( struct task_struct *tsk, bool isMain )
 {
-	char stat_array[3] = {'R', 'S', 'D'};
-	char stat_ch;
-	char *pThInf = tsk->stack;
+    char stat_array[3] = {'R', 'S', 'D'};
+    char stat_ch;
+    char *pThInf = tsk->stack;
 
-	stat_ch = tsk->state <= TASK_UNINTERRUPTIBLE ? stat_array[tsk->state] : '?';
-	printk( KERN_INFO "%8d  %8d  %8d     %16lld      %c (%d)    %3d     %08x     %c %s\n",
-			tsk->pid, (int)(tsk->utime), (int)(tsk->stime), tsk->se.exec_start, stat_ch, (int)(tsk->state),
-			*(int*)(pThInf + GAFINFO.thread_info_struct_cpu),
-			(int)tsk, isMain?'*':' ', tsk->comm );
+    stat_ch = tsk->state <= TASK_UNINTERRUPTIBLE ? stat_array[tsk->state] : '?';
+    printk( KERN_INFO "%8d  %8d  %8d     %16lld      %c (%d)    %3d     %08x     %c %s\n",
+          tsk->pid, (int)(tsk->utime), (int)(tsk->stime), tsk->se.exec_start, stat_ch, (int)(tsk->state),
+          *(int*)(pThInf + GAFINFO.thread_info_struct_cpu),
+          (int)tsk, isMain?'*':' ', tsk->comm );
 
-	if( tsk->state == TASK_RUNNING || tsk->state == TASK_UNINTERRUPTIBLE ) {
-		show_stack( tsk, NULL );
-	}
+    if( tsk->state == TASK_RUNNING || tsk->state == TASK_UNINTERRUPTIBLE ) {
+	    show_stack( tsk, NULL );
+    }
 }
 
 static void dump_all_task_info()
 {
-	struct task_struct *frst_tsk;
-	struct task_struct *curr_tsk;
-	struct task_struct *frst_thr;
-	struct task_struct *curr_thr;
+    struct task_struct *frst_tsk;
+    struct task_struct *curr_tsk;
+    struct task_struct *frst_thr;
+    struct task_struct *curr_thr;
 
-	printk( KERN_INFO "\n" );
-	printk( KERN_INFO " current proc : %d %s\n", current->pid, current->comm );
-	printk( KERN_INFO " -----------------------------------------------------------------------------------\n" );
-	printk( KERN_INFO "     pid     uTime     sTime              exec(ns)     stat     cpu     task_struct\n" );
-	printk( KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk( KERN_INFO "\n" );
+    printk( KERN_INFO " current proc : %d %s\n", current->pid, current->comm );
+    printk( KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk( KERN_INFO "     pid     uTime     sTime              exec(ns)     stat     cpu     task_struct\n" );
+    printk( KERN_INFO " -----------------------------------------------------------------------------------\n" );
 
-	//processes
-	frst_tsk = &init_task;
-	curr_tsk = frst_tsk;
-	while( curr_tsk != NULL ) {
-		dump_one_task_info( curr_tsk,  true );
-		//threads
-		if( curr_tsk->thread_group.next != NULL ) {
-			frst_thr = container_of( curr_tsk->thread_group.next, struct task_struct, thread_group );
-			curr_thr = frst_thr;
-			if( frst_thr != curr_tsk ) {
-				while( curr_thr != NULL ) {
-					dump_one_task_info( curr_thr, false );
-					curr_thr = container_of( curr_thr->thread_group.next, struct task_struct, thread_group );
-					if( curr_thr == curr_tsk ) break;
-				}
-			}
-		}
-		curr_tsk = container_of( curr_tsk->tasks.next, struct task_struct, tasks );
-		if( curr_tsk == frst_tsk ) break;
-	}
+    //processes
+    frst_tsk = &init_task;
+    curr_tsk = frst_tsk;
+    while( curr_tsk != NULL ) {
+    	dump_one_task_info( curr_tsk,  true );
+        //threads
+        if( curr_tsk->thread_group.next != NULL ) {
+        	frst_thr = container_of( curr_tsk->thread_group.next, struct task_struct, thread_group );
+        	curr_thr = frst_thr;
+            if( frst_thr != curr_tsk ) {
+            	while( curr_thr != NULL ) {
+            	    dump_one_task_info( curr_thr, false );
+            	    curr_thr = container_of( curr_thr->thread_group.next, struct task_struct, thread_group );
+                    if( curr_thr == curr_tsk ) break;
+            	}
+            }
+        }
+    	curr_tsk = container_of( curr_tsk->tasks.next, struct task_struct, tasks );
+        if( curr_tsk == frst_tsk ) break;
+    }
 
-	printk( KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk( KERN_INFO " -----------------------------------------------------------------------------------\n" );
 }
 
 
@@ -744,7 +689,7 @@ static void dump_cpu_stat()
 		//steal = cputime64_add(steal, kstat_cpu(i).cpustat.steal);
 		//guest = cputime64_add(guest, kstat_cpu(i).cpustat.guest);
 		//guest_nice = cputime64_add(guest_nice,
-		//      kstat_cpu(i).cpustat.guest_nice);
+		//	kstat_cpu(i).cpustat.guest_nice);
 		for_each_irq_nr(j) {
 			sum += kstat_irqs_cpu(j, i);
 		}
@@ -759,20 +704,21 @@ static void dump_cpu_stat()
 	}
 	sum += arch_irq_stat();
 
-	printk(KERN_INFO "\n");
+    printk(KERN_INFO "\n");
 	printk(KERN_INFO " cpu     user:%llu  nice:%llu  system:%llu  idle:%llu  iowait:%llu  irq:%llu  softirq:%llu %llu %llu "
-			"%llu\n",
-			(unsigned long long)cputime64_to_clock_t(user),
-			(unsigned long long)cputime64_to_clock_t(nice),
-			(unsigned long long)cputime64_to_clock_t(system),
-			(unsigned long long)cputime64_to_clock_t(idle),
-			(unsigned long long)cputime64_to_clock_t(iowait),
-			(unsigned long long)cputime64_to_clock_t(irq),
-			(unsigned long long)cputime64_to_clock_t(softirq),
-			(unsigned long long)0, //cputime64_to_clock_t(steal),
-			(unsigned long long)0, //cputime64_to_clock_t(guest),
-			(unsigned long long)0);//cputime64_to_clock_t(guest_nice));
-	printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+		"%llu\n",
+		(unsigned long long)cputime64_to_clock_t(user),
+		(unsigned long long)cputime64_to_clock_t(nice),
+		(unsigned long long)cputime64_to_clock_t(system),
+		(unsigned long long)cputime64_to_clock_t(idle),
+		(unsigned long long)cputime64_to_clock_t(iowait),
+		(unsigned long long)cputime64_to_clock_t(irq),
+		(unsigned long long)cputime64_to_clock_t(softirq),
+		(unsigned long long)0, //cputime64_to_clock_t(steal),
+		(unsigned long long)0, //cputime64_to_clock_t(guest),
+		(unsigned long long)0);//cputime64_to_clock_t(guest_nice));
+    printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+
 	for_each_online_cpu(i) {
 
 		/* Copy values here to work around gcc-2.95.3, gcc-2.96 */
@@ -787,25 +733,25 @@ static void dump_cpu_stat()
 		//steal = kstat_cpu(i).cpustat.steal;
 		//guest = kstat_cpu(i).cpustat.guest;
 		//guest_nice = kstat_cpu(i).cpustat.guest_nice;
-		printk(KERN_INFO " cpu %d   user:%llu  nice:%llu  system:%llu  idle:%llu  iowait:%llu  irq:%llu  softirq:%llu %llu %llu "
-				"%llu\n",
-				i,
-				(unsigned long long)cputime64_to_clock_t(user),
-				(unsigned long long)cputime64_to_clock_t(nice),
-				(unsigned long long)cputime64_to_clock_t(system),
-				(unsigned long long)cputime64_to_clock_t(idle),
-				(unsigned long long)cputime64_to_clock_t(iowait),
-				(unsigned long long)cputime64_to_clock_t(irq),
-				(unsigned long long)cputime64_to_clock_t(softirq),
-				(unsigned long long)0, //cputime64_to_clock_t(steal),
-				(unsigned long long)0, //cputime64_to_clock_t(guest),
-				(unsigned long long)0);//cputime64_to_clock_t(guest_nice));
+    	printk(KERN_INFO " cpu %d   user:%llu  nice:%llu  system:%llu  idle:%llu  iowait:%llu  irq:%llu  softirq:%llu %llu %llu "
+	    	"%llu\n",
+			i,
+			(unsigned long long)cputime64_to_clock_t(user),
+			(unsigned long long)cputime64_to_clock_t(nice),
+			(unsigned long long)cputime64_to_clock_t(system),
+			(unsigned long long)cputime64_to_clock_t(idle),
+			(unsigned long long)cputime64_to_clock_t(iowait),
+			(unsigned long long)cputime64_to_clock_t(irq),
+			(unsigned long long)cputime64_to_clock_t(softirq),
+			(unsigned long long)0, //cputime64_to_clock_t(steal),
+			(unsigned long long)0, //cputime64_to_clock_t(guest),
+			(unsigned long long)0);//cputime64_to_clock_t(guest_nice));
 	}
-	printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
 
-	printk(KERN_INFO "\n");
+    printk(KERN_INFO "\n");
 	printk(KERN_INFO " irq : %llu", (unsigned long long)sum);
-	printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
 
 	/* sum again ? it could be updated? */
 	for_each_irq_nr(j) {
@@ -815,15 +761,15 @@ static void dump_cpu_stat()
 
 		if(per_irq_sum)  printk(KERN_INFO " irq-%d : %u\n", j, per_irq_sum);
 	}
-	printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
 
-	printk(KERN_INFO "\n");
+    printk(KERN_INFO "\n");
 	printk(KERN_INFO " softirq : %llu", (unsigned long long)sum_softirq);
-	printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
 
 	for (i = 0; i < NR_SOFTIRQS; i++)
 		if(per_softirq_sums[i]) printk(KERN_INFO " softirq-%d : %u", i, per_softirq_sums[i]);
-	printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
+    printk(KERN_INFO " -----------------------------------------------------------------------------------\n" );
 	return 0;
 }
 
@@ -834,5 +780,6 @@ void dump_debug_info_forced_ramd_dump()
 }
 EXPORT_SYMBOL(dump_debug_info_forced_ramd_dump);
 //}} GAF3.0
+
 
 #endif

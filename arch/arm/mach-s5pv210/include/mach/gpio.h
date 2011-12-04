@@ -250,4 +250,23 @@ extern int s3c_gpio_set_slewrate(unsigned int pin, unsigned int config);
 extern int s3c_gpio_slp_setpull_updown(unsigned int pin, s3c_gpio_pull_t pull);
 extern int s5pv210_gpiolib_init(void);
 
+
+#if defined(CONFIG_MACH_STEALTHV)
+
+#if defined(CONFIG_TIKAL_USCC)
+#include <mach/gpio-tikal_uscc.h>
+#else
+#include <mach/gpio-stealthv.h>
+#endif
+
+#elif defined(CONFIG_MACH_AEGIS)
+#include <mach/gpio-aegis.h>
+#elif defined(CONFIG_MACH_VIPER)
+#include <mach/gpio-viper.h>
+#elif defined(CONFIG_MACH_CHIEF)
+#include <mach/gpio-chief.h>
+#else
+#include <mach/gpio-aries.h>
+#endif
+
 #endif /* __ASM_ARCH_GPIO_H */

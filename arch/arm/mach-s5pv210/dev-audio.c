@@ -24,11 +24,13 @@ static int s5pv210_cfg_i2s(struct platform_device *pdev)
 	/* configure GPIO for i2s port */
 	switch (pdev->id) {
 	case 1:
+#ifndef CONFIG_MACH_CHIEF    // heatup - chief - block
 		s3c_gpio_cfgpin(S5PV210_GPC0(0), S3C_GPIO_SFN(2));
 		s3c_gpio_cfgpin(S5PV210_GPC0(1), S3C_GPIO_SFN(2));
 		s3c_gpio_cfgpin(S5PV210_GPC0(2), S3C_GPIO_SFN(2));
 		s3c_gpio_cfgpin(S5PV210_GPC0(3), S3C_GPIO_SFN(2));
 		s3c_gpio_cfgpin(S5PV210_GPC0(4), S3C_GPIO_SFN(2));
+#endif
 		break;
 
 	case 2:
@@ -158,11 +160,13 @@ static int s5pv210_pcm_cfg_gpio(struct platform_device *pdev)
 		s3c_gpio_cfgpin(S5PV210_GPI(4), S3C_GPIO_SFN(3));
 		break;
 	case 1:
+#ifndef CONFIG_MACH_CHIEF    // heatup - chief - block
 		s3c_gpio_cfgpin(S5PV210_GPC0(0), S3C_GPIO_SFN(3));
 		s3c_gpio_cfgpin(S5PV210_GPC0(1), S3C_GPIO_SFN(3));
 		s3c_gpio_cfgpin(S5PV210_GPC0(2), S3C_GPIO_SFN(3));
 		s3c_gpio_cfgpin(S5PV210_GPC0(3), S3C_GPIO_SFN(3));
 		s3c_gpio_cfgpin(S5PV210_GPC0(4), S3C_GPIO_SFN(3));
+#endif
 		break;
 	case 2:
 		s3c_gpio_cfgpin(S5PV210_GPC1(0), S3C_GPIO_SFN(2));
@@ -271,12 +275,13 @@ struct platform_device s5pv210_device_pcm2 = {
 
 static int s5pv210_ac97_cfg_gpio(struct platform_device *pdev)
 {
+#ifndef CONFIG_MACH_CHIEF     // heatup - chief - block
 	s3c_gpio_cfgpin(S5PV210_GPC0(0), S3C_GPIO_SFN(4));
 	s3c_gpio_cfgpin(S5PV210_GPC0(1), S3C_GPIO_SFN(4));
 	s3c_gpio_cfgpin(S5PV210_GPC0(2), S3C_GPIO_SFN(4));
 	s3c_gpio_cfgpin(S5PV210_GPC0(3), S3C_GPIO_SFN(4));
 	s3c_gpio_cfgpin(S5PV210_GPC0(4), S3C_GPIO_SFN(4));
-
+#endif
 	return 0;
 }
 

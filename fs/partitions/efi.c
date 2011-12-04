@@ -147,7 +147,16 @@ static u64 last_lba(struct block_device *bdev)
 	return div_u64(bdev->bd_inode->i_size,
 		       bdev_logical_block_size(bdev)) - 1ULL;
 }
-
+#if defined(CONFIG_MACH_VIPER) || defined(CONFIG_MACH_CHIEF)
+static inline int
+pmbr_part_valid(struct partition *part)
+{
+        if (part->sys_ind == EFI_PMBR_OSTYPE_EFI_GPT &&
+            le32_to_cpu(part->start_sect) == 25UL)
+                return 1;
+        return 0;
+}
+#else
 static inline int
 pmbr_part_valid(struct partition *part)
 {
@@ -156,6 +165,7 @@ pmbr_part_valid(struct partition *part)
                 return 1;
         return 0;
 }
+#endif
 
 /**
  * is_pmbr_valid(): test Protective MBR for validity

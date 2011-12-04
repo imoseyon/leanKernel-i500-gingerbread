@@ -713,6 +713,7 @@ asmlinkage void __init start_kernel(void)
 #ifdef CONFIG_KERNEL_DEBUG_SEC
 	kernel_sec_init();
 #endif
+
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
 }

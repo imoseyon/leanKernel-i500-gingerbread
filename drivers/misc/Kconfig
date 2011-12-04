@@ -338,13 +338,6 @@ config SENSORS_AK8975
 	  If you say yes here you get support for Asahi Kasei's
 	  orientation sensor AK8975.
 
-config GRIP_SENSOR_AGS04
-	tristate "AGS04 grip sensor support"
-	default n
-	depends on S5PV210_GARNETT_DELTA
-	help
-	  If yo say yes here you get support for AGS04 grip sensor	
-
 config EP93XX_PWM
 	tristate "EP93xx PWM support"
 	depends on ARCH_EP93XX
@@ -421,18 +414,20 @@ config APANIC_PLABEL
 	 If your platform uses a different flash partition label for storing
  	 crashdumps, enter it here.
 
-config VIBETONZ
-	tristate "Vibetonz"
-	default m
-	---help---
-	  Say Y to enable Vibetonz support.
-
 config SAMSUNG_JACK
 	bool "3.5MM ear jack driver for Samsung devices"
 	depends on INPUT
 	default n
 	---help---
 	 This is 3.5MM ear jack driver for Samsung devices.
+
+	 If unsure, say N.
+
+config SAMSUNG_FM_SI4709
+	tristate "SI4709 FM radio driver for Samsung devices"
+	default m
+	---help---
+	 This is SI4709 FM radio driver for Samsung devices.
 
 	 If unsure, say N.
 
@@ -449,7 +444,13 @@ source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
 source "drivers/misc/iwmc3200top/Kconfig"
+source "drivers/misc/samsung_modemctl/Kconfig"
 
+menuconfig VIBETONZ
+        tristate "Vibetonz"
+        default m
+        help
+          Say Y to enable Vibetonz support.
 
 config PN544
 	bool "NXP PN544 NFC Controller Driver"
@@ -457,28 +458,22 @@ config PN544
 	help
 	  NXP PN544 Near Field Communication controller support.
 
-config J4FS
-        tristate "Samsung LFS"
-        default m
-        help
-          Samsung LFS
-
 config PARAM
-        tristate "Samsung PARAM"
-        default m
-        help
-          Samsung PARAM
+	tristate "Samsung PARAM"
+	default m
+	help
+	  Samsung PARAM
 
 config LEVEL
-        tristate "level_debug"
-        default n
-        help
-          Say Y to enable debug level I/F support.
+	tristate "level_debug"
+	default n
+	help
+	  Say Y to enable debug level I/F support.
 
 config STORAGE_DGS
-        tristate "readable dgs"
-        default m
-        help
-          Say Y to readable dgs I/F support.
+	tristate "readable dgs"
+	default m
+	help
+	  Say Y to readable dgs I/F support.
 
 endif # MISC_DEVICES

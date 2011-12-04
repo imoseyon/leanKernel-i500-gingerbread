@@ -1,5 +1,5 @@
-ifeq ($(CONFIG_MACH_FORTE),y)
-obj-$(CONFIG_VIDEO_FIMC)	+= fimc_dev.o fimc_v4l2.o fimc_capture_forte.o fimc_output.o fimc_overlay.o fimc_regs.o
+ifeq ($(CONFIG_TIKAL_USCC),y)
+obj-$(CONFIG_VIDEO_FIMC)	+= fimc_dev.o fimc_v4l2.o fimc_capture_mipi.o fimc_output.o fimc_overlay.o fimc_regs.o
 else
 obj-$(CONFIG_VIDEO_FIMC)	+= fimc_dev.o fimc_v4l2.o fimc_capture.o fimc_output.o fimc_overlay.o fimc_regs.o
 endif

@@ -11,6 +11,7 @@
 #ifndef S3C_PCMDEV_H_
 #define S3C_PCMDEV_H_
 
+#define USE_INFINIEON_EC_FOR_VT
 
 /* Clock dividers */
 /*#define S3C_DIV_MCLK	0 */

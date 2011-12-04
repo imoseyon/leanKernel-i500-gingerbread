@@ -31,7 +31,7 @@
 #include "hash.h"
 #include "osfunc.h"
 
-#define _DISABLE_HASH_RESIZE
+//#define _DISABLE_HASH_RESIZE
 
 #define PRIVATE_MAX(a,b) ((a)>(b)?(a):(b))
 
@@ -136,7 +136,11 @@ _ChainInsert (HASH_TABLE *pHash, BUCKET *pBucket, BUCKET **ppBucketTable, IMG_UI
 	PVR_ASSERT (pBucket != IMG_NULL);
 	PVR_ASSERT (ppBucketTable != IMG_NULL);
 	PVR_ASSERT (uSize != 0);
-
+	if ((int)pBucket == -1)
+ 	{
+	  PVR_DPF((PVR_DBG_ERROR, "invalied bucket value ; pBucket == -1  !!!!!!"));
+  }
+  
 	if ((pBucket == IMG_NULL) || (ppBucketTable == IMG_NULL) || (uSize == 0))
 	{
 		PVR_DPF((PVR_DBG_ERROR, "_ChainInsert: invalid parameter"));
@@ -182,6 +186,7 @@ _Resize (HASH_TABLE *pHash, IMG_UINT32 uNewSize)
 #ifdef _DISABLE_HASH_RESIZE
 	return IMG_TRUE;
 #endif
+
 	if (uNewSize != pHash->uSize)
     {
 		BUCKET **ppNewTable;
@@ -224,7 +229,7 @@ HASH_TABLE * HASH_Create_Extended (IMG_UINT32 uInitialLen, IMG_SIZE_T uKeySize, 
 #ifdef _DISABLE_HASH_RESIZE
 	uInitialLen = 1024;	
 #endif
-
+	
 	if(OSAllocMem(PVRSRV_PAGEABLE_SELECT,
 					sizeof(HASH_TABLE),
 					(IMG_VOID **)&pHash, IMG_NULL,

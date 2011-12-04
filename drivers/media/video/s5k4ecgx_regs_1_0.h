@@ -4222,6 +4222,9 @@ static const u32 s5k4ecgx_Night_Capture_v1[] = {
 	0x0F120AAA,
 };
 
+static const u32 s5k4ecgx_Beach_Snow_Fire_Capture_v1[] = {
+};
+
 
 static const u32 s5k4ecgx_AF_Return_Inf_pos_v1[] = {
 	0x002A159A,
@@ -4799,5 +4802,9 @@ static const u32 s5k4ecgx_get_shutterspeed_reg_v1[] = {
 	0x002C7000,
 	0x002E2AD8,
 };
+
+static const u32 s5k4ecgx_return_night_preview_v1[] = {
+};
+
 
 #endif /* __S5K4ECGX_REGS_1_0_H__ */

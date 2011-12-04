@@ -48,7 +48,11 @@ static struct regulator_consumer_supply s5pv210_pd_cam_supply[] = {
 	REGULATOR_SUPPLY("pd", "s3c-fimc.1"),
 	REGULATOR_SUPPLY("pd", "s3c-fimc.2"),
 	REGULATOR_SUPPLY("pd", "s3c-jpg"),
+	#ifndef CONFIG_MACH_CHIEF
+	REGULATOR_SUPPLY("pd", "s3c-csis.0"),
+	#else
 	REGULATOR_SUPPLY("pd", "s3c-csis"),
+	#endif
 	REGULATOR_SUPPLY("pd", "s5p-rotator"),
 };
 

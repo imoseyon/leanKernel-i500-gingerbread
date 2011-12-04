@@ -17,12 +17,9 @@
 #include <linux/leds.h>
 #include "leds.h"
 
-extern unsigned int charging_mode_get(void);	// hanapark (Power-off charging)
-
 static void defon_trig_activate(struct led_classdev *led_cdev)
 {
-//	if (!charging_mode_get())	// hanapark (Power-off charging froyo_merge_check)
-		led_set_brightness(led_cdev, LED_FULL);
+	led_set_brightness(led_cdev, led_cdev->max_brightness);
 }
 
 static struct led_trigger defon_led_trigger = {

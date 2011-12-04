@@ -72,10 +72,6 @@ struct clk		*mdnie_clock;
 
 static u16 pre_0x0100 = 0;
 
-#if defined(CONFIG_ARIES_LATONA)
-extern void on_cabc(void);
-#endif
-
 static DEFINE_MUTEX(mdnie_use);
 
 
@@ -84,16 +80,182 @@ typedef struct {
 	u16 data;
 } mDNIe_data_type;
 
+typedef enum
+{
+	mDNIe_UI_MODE,
+	mDNIe_VIDEO_MODE,
+	mDNIe_VIDEO_WARM_MODE,
+	mDNIe_VIDEO_COLD_MODE,
+	mDNIe_CAMERA_MODE,
+	mDNIe_NAVI,
+    mDNIe_GALLERY
+}Lcd_mDNIe_UI;
+
 struct class *mdnieset_ui_class;
 struct device *switch_mdnieset_ui_dev;
 struct class *mdnieset_outdoor_class;
 struct device *switch_mdnieset_outdoor_dev;
 
-#ifdef MDNIE_TUNING
-#include "s3cfb_mdnie_tune_value.h"
-#else
-#include "s3cfb_mdnie_value.h"
-#endif
+
+mDNIe_data_type mDNIe_Video[]= 
+{
+    0x0084, 0x0040,     //hdtr pcc
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x00c0, 0x0400,     //PCC skin
+    0x00c4, 0x7200,     //cb
+    0x00c8, 0x008d,     //cr
+    0x00d0, 0x0180,
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Camera[]= 
+{
+    0x0084, 0x0040,     //hdtr pcc
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x00c0, 0x0400,     //PCC skin
+    0x00c4, 0x7200,     //cb
+    0x00c8, 0x008d,     //cr
+    0x00d0, 0x0180,
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Camera_Outdoor_Mode[]= 
+{
+    0x0084, 0x0080,     //hdtr ove
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x0100, 0x6050,     //ove light chroma
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_UI[]= 
+{
+    0x0084, 0x0040,     //hdtr pcc
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0010,     //de 0, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x03ff,     //de th.
+    0x00c0, 0x0400,     //PCC skin
+    0x00c4, 0x7200,     //cb
+    0x00c8, 0x008d,     //cr
+    0x00d0, 0x0180,
+    END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Video_Warm[]= 
+{
+    0x0084, 0x0060,     //hdtr pcc mcm
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x00c0, 0x0400,     //PCC skin
+    0x00c4, 0x7200,     //cb
+    0x00c8, 0x008d,     //cr
+    0x00d0, 0x0180,     //strength 6
+    0x0120, 0x0028,     //mcm quad off 4000k
+    0x0138, 0x7600,     //cb
+    0x0140, 0x008d,     //cr
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Video_WO_Mode[]= 
+{
+    0x0084, 0x00a0,     //hdtr ove mcm
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x0100, 0x6050,     //ove light chroma
+    0x0120, 0x0028,     //mcm quad off 4000k
+    0x0138, 0x7600,     //cb
+    0x0140, 0x008d,     //cr
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Video_Cold[]= 
+{
+    0x0084, 0x0060,     //hdtr pcc mcm
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x00c0, 0x0400,     //PCC skin
+    0x00c4, 0x7200,     //cb
+    0x00c8, 0x008d,     //cr
+    0x00d0, 0x0180,     //strength 6
+    0x0120, 0x0064,     //mcm quad off 10000k
+    0x0140, 0x8a00,     //cb
+    0x0148, 0x0073,     //cr
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Video_CO_Mode[]= 
+{
+    0x0084, 0x00a0,     //hdtr ove mcm
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x0100, 0x6050,     //ove light chroma
+    0x0120, 0x0064,     //mcm quad off 10000k
+    0x0140, 0x8a00,     //cb
+    0x0148, 0x0073,     //cr
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Outdoor_Mode[]= 
+{
+    0x0084, 0x0080,     //hdtr ove
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x0100, 0x6050,     //ove light chroma
+	END_SEQ, 0x0000,
+};
+
+mDNIe_data_type mDNIe_Gallery_Mode[]= 
+{
+    0x0084, 0x0040,     //hdtr pcc
+    0x0090, 0x0000,     //decontour th.
+    0x0094, 0x0fff,     //directional th.
+    0x0098, 0x005c,     //simplicity th.
+    0x009c, 0x0ff0,     //de 127, ce off
+    0x00ac, 0x0200,     //skin detect off, cs 512
+    0x00b4, 0x0001,     //de th.
+    0x00c0, 0x0400,     //PCC skin
+    0x00c4, 0x7200,     //cb
+    0x00c8, 0x008d,     //cr
+    0x00d0, 0x0180,
+    END_SEQ, 0x0000,
+};
 
 Lcd_mDNIe_UI current_mDNIe_UI = mDNIe_UI_MODE; // mDNIe Set Status Checking Value.
 u8 current_mDNIe_OutDoor_OnOff = FALSE;
@@ -112,20 +274,6 @@ extern int pre_val;
 
 u16 mDNIe_data_ui[]=
 {
-#if defined(CONFIG_ARIES_LATONA)
-	0x0084,0x0020, //algorithm selection + mcm
-	0x0090,0x0000, //decontour th.
-	0x0094,0x0fff, //directional th.
-	0x0098,0x005c, //simplicity th.
-	0x009c,0x0ff0, //de 127, ce off
-	0x00ac,0x0200, //skin detect off, cs 512
-	0x00b4,0x0100, //de th.
-	0x0120,0x0064, //MCM 10000K
-	0x0140,0x8d00, //cb
-	0x0148,0x0073, //cr
-	0x0134,0xFFF8, //LSF 248
-	END_SEQ, 0x0000,
-#else
 	0x0084, 0x0040,
 	0x0090, 0x0000,
 	0x0094, 0x0fff,
@@ -139,7 +287,6 @@ u16 mDNIe_data_ui[]=
 	0x00D0, 0x00C0,
 	0x0100, 0x0000,
 	END_SEQ, 0x0000,
-#endif
 };
 
 u16 mDNIe_data_300cd_level1[]=
@@ -229,8 +376,7 @@ int mDNIe_data_level5_cnt = 0;
 u16 mDNIe_data[100] = {0};
 
 
-unsigned short *test[1];
-//extern unsigned short *test[1];
+extern unsigned short *test[1];
 int mdnie_tuning_load = 0;
 EXPORT_SYMBOL(mdnie_tuning_load);
 
@@ -476,11 +622,10 @@ void mDNIe_Set_Mode(Lcd_mDNIe_UI mode, u8 mDNIe_Outdoor_OnOff)
 			case mDNIe_NAVI:
 				mDNIe_Mode_Change(mDNIe_Outdoor_Mode);
 			break;
-#if defined(CONFIG_ARIES_LATONA)
+
 			case mDNIe_GALLERY:
-				mDNIe_Mode_Change(mDNIe_Gallery);
+				mDNIe_Mode_Change(mDNIe_Gallery_Mode);
 			break;
-#endif
 		}
 
 		current_mDNIe_UI = mode;
@@ -517,20 +662,15 @@ void mDNIe_Set_Mode(Lcd_mDNIe_UI mode, u8 mDNIe_Outdoor_OnOff)
 			case mDNIe_NAVI:
 				mDNIe_Mode_Change(mDNIe_UI);
 			break;
-#if defined(CONFIG_ARIES_LATONA)
+
 			case mDNIe_GALLERY:
-				mDNIe_Mode_Change(mDNIe_Gallery);
+				mDNIe_Mode_Change(mDNIe_Gallery_Mode);
 			break;
-#endif
 		}
 		
 		current_mDNIe_UI = mode;
 		current_mDNIe_OutDoor_OnOff = FALSE;
 	}	
-
-#if defined(CONFIG_ARIES_LATONA)
-	on_cabc();
-#endif
 
 
 	pre_0x0100 = 0;
@@ -582,11 +722,9 @@ static ssize_t mdnieset_ui_file_cmd_show(struct device *dev,
 			mdnie_ui = 5;
                         break;
 
-#if defined(CONFIG_ARIES_LATONA)
 		case mDNIe_GALLERY:
 			mdnie_ui = 6;
 			break;
-#endif
 	}
 	return sprintf(buf,"%u\n",mdnie_ui);
 }
@@ -625,11 +763,11 @@ static ssize_t mdnieset_ui_file_cmd_store(struct device *dev,
 		case SIG_MDNIE_NAVI:
 			current_mDNIe_UI = mDNIe_NAVI;
 			break;
-#if defined(CONFIG_ARIES_LATONA)
+	
 		case SIG_MDNIE_GALLERY:
 			current_mDNIe_UI = mDNIe_GALLERY;
 			break;
-#endif			
+	
 		default:
 			printk("\nmdnieset_ui_file_cmd_store value is wrong : value(%d)\n",value);
 			break;
@@ -965,179 +1103,6 @@ void mDNIe_tuning_set(void)
 	s3c_mdnie_unmask();
 }
 
-#if defined(CONFIG_ARIES_LATONA)
-static int parse_text(char * src, int len)
-{
-	int i,count, ret;
-	int index=0;
-	char * str_line[100];
-	char * sstart;
-	char * c;
-	unsigned int data1, data2;
-
-	c = src;
-	count = 0;
-	sstart = c;
-    
-	for(i=0; i<len; i++,c++) 
-    {
-		char a = *c;
-		if(a=='\r' || a=='\n') 
-        {
-			if(c > sstart) 
-            {
-				str_line[count] = sstart;
-				count++;
-			}
-			*c='\0';
-			sstart = c+1;
-		}
-	}
-    
-	if(c > sstart) 
-    {
-		str_line[count] = sstart;
-		count++;
-	}
-
-	printk("----------------------------- Total number of lines:%d\n", count);
-
-	for(i=0; i<count; i++) 
-    {
-		printk("line:%d, [start]%s[end]\n", i, str_line[i]);
-		ret = sscanf(str_line[i], "0x%x,0x%x\n", &data1, &data2);
-		printk("Result => [0x%2x 0x%4x] %s\n", data1, data2, (ret==2)?"Ok":"Not available");
-		if(ret == 2) 
-        {   
-			mDNIe_data[index++] = (u16)data1;
-			mDNIe_data[index++]  = (u16)data2;
-		}
-	}
-	return index;
-}
-
-static int parse_text2(char * src, int len)
-{
-	int i,count, ret, real_count;
-	int index=0;
-	char * str_line[1000];
-	char * sstart;
-	char * c;
-	char mode_name[20];
-	unsigned int data1, data2;
-	mDNIe_data_type *mode;
-
-	c = src;
-	count = 0;
-	sstart = c;
-	real_count = 0;
-    
-	for(i=0; i<len; i++,c++) 
-    {
-		char a = *c;
-		if(a=='\r' || a=='\n') 
-        {
-			if(c > sstart) 
-            {
-				str_line[count] = sstart;
-				count++;
-			}
-			*c='\0';
-			sstart = c+1;
-			
-			real_count++;
-		}
-	}
-    
-	if(c > sstart) 
-    {
-		str_line[count] = sstart;
-		count++;
-	}
-
-	printk("----------------------------- Total number of lines:%d\n", count);
-	
-	for(i=0; i<count; i++) 
-    {
-		ret = sscanf(str_line[i], "mDNIe_data_type %s[]= \n", mode_name);
-		if(ret == 1)
-		{
-			*(strchr(mode_name,'[')) = 0;
-			
-			if(strcmp(mode_name,"mDNIe_Video")==0)
-			{
-				mode = mDNIe_Video;
-			}
-			else if(strcmp(mode_name,"mDNIe_Camera")==0)
-			{
-				mode = mDNIe_Camera;
-			}
-			else if(strcmp(mode_name,"mDNIe_Camera_Outdoor_Mode")==0)
-			{
-				mode = mDNIe_Camera_Outdoor_Mode;
-			}
-			else if(strcmp(mode_name,"mDNIe_UI")==0)
-			{
-				mode = mDNIe_UI;
-			}
-			else if(strcmp(mode_name,"mDNIe_Video_Warm")==0)
-			{
-				mode = mDNIe_Video_Warm;
-			}
-			else if(strcmp(mode_name,"mDNIe_Video_WO_Mode")==0)
-			{
-				mode = mDNIe_Video_WO_Mode;
-			}
-			else if(strcmp(mode_name,"mDNIe_Video_Cold")==0)
-			{
-				mode = mDNIe_Video_Cold;
-			}
-			else if(strcmp(mode_name,"mDNIe_Video_CO_Mode")==0)
-			{
-				mode = mDNIe_Video_CO_Mode;
-			}
-			else if(strcmp(mode_name,"mDNIe_Outdoor_Mode")==0)
-			{
-				mode = mDNIe_Outdoor_Mode;
-			}
-			else if(strcmp(mode_name,"mDNIe_Gallery")==0)
-			{
-				mode = mDNIe_Gallery;
-			}
-			else
-			{
-				mode = 0;
-			}
-			//printk("mode name : %s - %x\n",mode_name,mode);
-		}
-
-		while(*str_line[i] == '\t' || *str_line[i] == ' ')
-		{
-			str_line[i]++;
-		}
-		printk("line:%d, [start]%s[end]\n", i, str_line[i]);
-		ret = sscanf(str_line[i], "0x%x,0x%x\n", &data1, &data2);
-		printk("Result => [0x%2x 0x%4x] %s\n", data1, data2, (ret==2)?"Ok":"Not available");
-		if(ret == 2 && mode != 0) 
-        {
-			mode->addr = (u16)data1;
-			mode->data = (u16)data2;
-			mode++;
-		}
-
-		if(str_line[i][0] == '}')
-		{
-			if(mode != 0)
-			{
-				mode->addr = (u16)END_SEQ;
-				mode->data = (u16)0x0000;
-			}
-		}
-	}
-	return real_count+1;
-}
-
-#endif
 
 void mDNIe_txtbuf_to_parsing(void)
 {
@@ -1155,112 +1120,6 @@ void mDNIe_txtbuf_to_parsing(void)
 	mDNIe_Tuning_Mode = TRUE;
 }
 EXPORT_SYMBOL(mDNIe_txtbuf_to_parsing);
-
-#if defined(CONFIG_ARIES_LATONA)
-int mDNIe_txtbuf_to_parsing2(void)
-{
-	struct file *filp;
-	char	*dp;
-	long	l, i ;
-	loff_t  pos;
-	int     ret, num,type;
-	mm_segment_t fs;
-
-	printk("cmc623_load_data start!\n");
-
-	fs = get_fs();
-	set_fs(get_ds());
-
-	filp = filp_open("sdcard/external_sd/s3cfb_mdnie_value.h", O_RDONLY, 0);
-	type = 2;
-	
-	if(IS_ERR(filp))
-	{
-		filp = filp_open("sdcard/external_sd/mdnie_tune", O_RDONLY, 0);
-		type = 1;
-
-		if(IS_ERR(filp)) 
-		{
-			printk("file open error:%d\n", (s32)filp);
-
-			return -1;
-		}
-	}
-
-	l = filp->f_path.dentry->d_inode->i_size;
-	printk("Size of the file : %ld(bytes)\n", l);
-
-	//dp = kmalloc(l, GFP_KERNEL);
-	dp = kmalloc(l+10, GFP_KERNEL);		// add cushion
-	if(dp == NULL) 
-    {
-		printk("Out of Memory!\n");
-		filp_close(filp, current->files);
-		return -1;
-	}
-	pos = 0;
-	memset(dp, 0, l);
-    printk("== Before vfs_read ======\n");
-	ret = vfs_read(filp, (char __user *)dp, l, &pos);   // P1_LSJ : DE08 : ?�기??죽음 
-    printk("== After vfs_read ======\n");
-
-	if(ret != l) 
-    {
-		printk("<CMC623> Failed to read file (ret = %d)\n", ret);
-		kfree(dp);
-		filp_close(filp, current->files);
-		return -1;
-	}
-
-	filp_close(filp, current->files);
-
-	set_fs(fs);
-/*
-	for(i=0; i<l; i++)
-    {   
-		printk("%x ", dp[i]);
-    }
-	printk("\n");
-//*/	
-	if(type == 1)
-	{
-		num = parse_text(dp, l);
-
-		if(!num) 
-		{
-			printk("Nothing to parse!\n");
-			kfree(dp);
-			return -1;
-		}
-			
-		printk("------ Jun Total number of parsed lines: %d\n", num);
-
-		mDNIe_data[num] = END_SEQ;
-
-		printk("read ok\n");
-		mDNIe_tuning_set();
-		printk("tuning set ok\n");
-
-		mDNIe_Tuning_Mode = TRUE;
-	}
-	else if(type == 2)
-	{
-		num = parse_text2(dp, l);
-		printk("read ok\n");
-		mDNIe_Set_Mode(current_mDNIe_UI,current_mDNIe_OutDoor_OnOff);
-		num *= 2;
-		printk("tuning set ok\n");
-
-		mDNIe_Tuning_Mode = FALSE;
-	}
-
-	kfree(dp);
-	
-	return num / 2;
-}
-EXPORT_SYMBOL(mDNIe_txtbuf_to_parsing2);
-#endif
-
 #endif
 
 #ifdef CONFIG_FB_S3C_MDNIE_TUNINGMODE_FOR_BACKLIGHT

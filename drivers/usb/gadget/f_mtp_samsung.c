@@ -55,8 +55,8 @@
 
 /*-------------------------------------------------------------------------*/
 /*Only for Debug*/
-#define DEBUG_MTP 0
-#define CSY_TEST
+#define DEBUG_MTP 0 
+/*#define CSY_TEST */
 
 #if DEBUG_MTP
 #define DEBUG_MTP_SETUP
@@ -652,54 +652,43 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 //			mtp_enable();
 			break;
 
-        case IOCTL_MTP_ENABLE:
 		case MTP_ONLY_ENABLE:
 			printk("[%s:%d] calling mtp_function_enable with %d \n",__func__,__LINE__,mtp_enable_desc);
 			mtp_function_enable(mtp_enable_desc);
 			DEBUG_MTPB("[%s] \tline [%d] MTP_ONLY_ENABLE \n", __func__,__LINE__);
-
+#ifdef  CONFIG_USB_ANDROID_ACCESSORY
+			if (dev->cdev && dev->cdev->gadget && (!dev->cdev->accessory_mode))
+#else
 			if (dev->cdev && dev->cdev->gadget )
+#endif
 			{
 				printk("[%s] B4 disconnecting gadget\tline = [%d] \n", __func__,__LINE__);
-				usb_gadget_disconnect(dev->cdev->gadget);
+				usb_composite_force_reset(dev->cdev);
 				printk("[%s] \tline = [%d] calling usb_gadget_connect after msleep of 5 \n", __func__,__LINE__);
-				msleep(5);
-				usb_gadget_connect(dev->cdev->gadget);
 			}
 			status = 10;
 			printk("[%s]  [%d] MTP_ONLY_ENABLE ioctl and clearing the error = 0 \n", __func__,__LINE__);
 			the_mtpg->error = 0;
 			break;
 
-        case IOCTL_MTP_DISABLE:
 		case MTP_DISABLE:
 			DEBUG_MTPB("[%s] \tline [%d] MTP_DISABLE \n", __func__,__LINE__);
 			//mtp_function_enable(mtp_disable_desc);
 
-#if 0
 			if (dev->cdev && dev->cdev->gadget )
 			{
 				usb_gadget_disconnect(dev->cdev->gadget);
 				msleep(5);
 				usb_gadget_connect(dev->cdev->gadget);
 			}
-#endif
-
-            printk("[%s:%d] Disabling MTP \n", __func__, __LINE__);
-
-            dev->error = 1;
-            // release readers when disabling mtp
-            wake_up(&dev->read_wq);
 
 			break;
 
-        case IOCTL_MTP_CLEAR_HALT:
 		case MTP_CLEAR_HALT:
 			status = usb_ep_clear_halt (dev->bulk_in);
 			status = usb_ep_clear_halt (dev->bulk_out);
 			break;
 
-        case IOCTL_MTP_WRITE_INT_DATA:
 		case MTP_WRITE_INT_DATA:
 			DEBUG_MTPB("[%s] \t %d MTP intrpt_Write \n",__func__,__LINE__);
 			ret_value = interrupt_write(fd, (const char *)arg, MTP_MAX_PACKET_LEN_FROM_APP );
@@ -713,13 +702,10 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 			}
 			break;
 
-        case IOCTL_MTP_SET_USER_PID:
 		case SET_MTP_USER_PID:
 			mtp_pid = arg;
 			DEBUG_MTPB("[%s] SET_MTP_USER_PID; pid = %d \tline = [%d] \n", __func__,mtp_pid,__LINE__);
 			break;
-
-        case IOCTL_MTP_GET_SETUP_DATA:
 		case GET_SETUP_DATA:
 			buf_ptr = (char *)arg;
 			DEBUG_MTPB("[%s] GET_SETUP_DATA\tline = [%d] \n", __func__,__LINE__);
@@ -728,17 +714,14 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 				DEBUG_MTPR("*****[%s]\t%d: copy-to-user failed!!!!\n",__FUNCTION__,__LINE__);
 			}
 			break;
-
 		case SEND_RESET_ACK:
-			req->zero = 1;
+			//req->zero = 1;
 			req->length = 0;
 			//printk("[%s] SEND_RESET_ACK and usb_ep_queu 0 data size = %d\tline = [%d] \n", __func__,size,__LINE__);
 			status = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
 			if (status < 0)
 					DEBUG_MTPB("[%s] Error at usb_ep_queue\tline = [%d] \n", __func__,__LINE__);
 			break;
-
-        case IOCTL_MTP_SET_SETUP_DATA:
 		case SET_SETUP_DATA:
 			buf_ptr = (char *)arg;
 			if (copy_from_user(buf, buf_ptr, USB_PTPREQUEST_GETSTATUS_SIZE)) {
@@ -756,7 +739,8 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 					DEBUG_MTPB("[%s] Error at usb_ep_queue\tline = [%d] \n", __func__,__LINE__);
 			break;
 		case SET_ZLP_DATA:
-			req->zero = 1;
+			//req->zero = 1;
+			req = req_get(dev, &dev->tx_idle);
 			req->length = 0;
 			printk("[%s] SEND_ZLP_DATA and usb_ep_queu 0 data size = %d\tline = [%d] \n", __func__,size,__LINE__);
 			status = usb_ep_queue(dev->bulk_in, req, GFP_ATOMIC);
@@ -941,7 +925,11 @@ static int __init mtpg_function_bind(struct usb_configuration *c, struct usb_fun
 
 	mtpg_interface_desc.bInterfaceNumber = id;
 
+#ifdef  CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+	ep = usb_ep_fixedconfig_alloc(cdev->gadget, &fs_mtpg_in_desc);
+#else
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_mtpg_in_desc);
+#endif
 	if (!ep){
 		printk("Error in usb_ep_autoconfig for fs IN DESC Failed !!!!!!!!!! \n");
 		goto autoconf_fail;
@@ -950,7 +938,11 @@ static int __init mtpg_function_bind(struct usb_configuration *c, struct usb_fun
 	mtpg->bulk_in = ep;
 	the_mtpg->bulk_in = ep;
 
+#ifdef  CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+	ep = usb_ep_fixedconfig_alloc(cdev->gadget, &fs_mtpg_out_desc);
+#else
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_mtpg_out_desc);
+#endif
 	if (!ep){
 		printk("Error in usb_ep_autoconfig for fs OUT DESC Failed !!!!!!!!!! \n");
 		goto autoconf_fail;
@@ -1114,7 +1106,11 @@ static void mtp_complete_cancel_io(struct usb_ep *ep,
 		struct usb_request *req)
 {
 	int i;
+#ifdef CONFIG_USB_ANDRPID_SHARE_ENDPOINT                    
+	struct mtpg_dev	*dev = the_mtpg;
+#else
 	struct mtpg_dev	*dev = ep->driver_data;
+#endif 
 	DEBUG_MTPB("[%s] \tline = [%d] \n", __func__,__LINE__);
 	if (req->status != 0)
 	{
@@ -1166,7 +1162,8 @@ static int mtpg_function_setup(struct usb_function *f,
 			DEBUG_MTPB("[%s] USB_PTPREQUEST_CANCELIO \tline = [%d] \n", __func__,__LINE__);
 			DEBUG_MTPB("[%s] \tline = [%d]  w_value = %x,w_index = %x, w_length = %x\n",__func__, __LINE__, w_value, w_index, w_length);
 			//if (w_value == 0x00 && w_index == mtpg_interface_desc.bInterfaceNumber && w_length == 0x06)
-			 if (w_value == 0x00 && w_length == 0x06)
+			if (w_value == 0x00 && w_length == 0x06)
+			
 			{
 				DEBUG_MTPB("[%s] read USB_PTPREQUEST_CANCELIO data \tline = [%d] \n", __func__,__LINE__);
 				value = w_length;

@@ -1496,31 +1496,38 @@ static int addrconf_ifid_eui48(u8 *eui, struct net_device *dev)
 {
 	if (dev->addr_len != ETH_ALEN)
 		return -1;
-	memcpy(eui, dev->dev_addr, 3);
-	memcpy(eui + 5, dev->dev_addr + 3, 3);
+	if((memcmp(dev->name, "pdp", 3) == 0) ||
+		(memcmp(dev->name, "hrpd", 4)==0)){	
+				memcpy(eui, dev->interface_iden, 8);
+				return 0;		
+	} else{
 
-	/*
-	 * The zSeries OSA network cards can be shared among various
-	 * OS instances, but the OSA cards have only one MAC address.
-	 * This leads to duplicate address conflicts in conjunction
-	 * with IPv6 if more than one instance uses the same card.
-	 *
-	 * The driver for these cards can deliver a unique 16-bit
-	 * identifier for each instance sharing the same card.  It is
-	 * placed instead of 0xFFFE in the interface identifier.  The
-	 * "u" bit of the interface identifier is not inverted in this
-	 * case.  Hence the resulting interface identifier has local
-	 * scope according to RFC2373.
-	 */
-	if (dev->dev_id) {
-		eui[3] = (dev->dev_id >> 8) & 0xFF;
-		eui[4] = dev->dev_id & 0xFF;
-	} else {
-		eui[3] = 0xFF;
-		eui[4] = 0xFE;
-		eui[0] ^= 2;
+		memcpy(eui, dev->dev_addr, 3);
+		memcpy(eui + 5, dev->dev_addr + 3, 3);
+
+		/*
+		 * The zSeries OSA network cards can be shared among various
+		 * OS instances, but the OSA cards have only one MAC address.
+		 * This leads to duplicate address conflicts in conjunction
+		 * with IPv6 if more than one instance uses the same card.
+		 *
+		 * The driver for these cards can deliver a unique 16-bit
+		 * identifier for each instance sharing the same card.  It is
+		 * placed instead of 0xFFFE in the interface identifier.  The
+		 * "u" bit of the interface identifier is not inverted in this
+		 * case.  Hence the resulting interface identifier has local
+		 * scope according to RFC2373.
+		 */
+		if (dev->dev_id) {
+			eui[3] = (dev->dev_id >> 8) & 0xFF;
+			eui[4] = dev->dev_id & 0xFF;
+		} else {
+			eui[3] = 0xFF;
+			eui[4] = 0xFE;
+			eui[0] ^= 2;
+		}
+		return 0;
 	}
-	return 0;
 }
 
 static int addrconf_ifid_arcnet(u8 *eui, struct net_device *dev)
@@ -2104,6 +2111,26 @@ err_exit:
 	return err;
 }
 
+static int inet6_ifid_add(struct net *net, int ifindex, struct in6_addr *pfx, unsigned int plen)
+{
+	struct inet6_ifaddr *ifp;
+	struct inet6_dev *idev;
+	struct net_device *dev;
+
+	if (plen > 128)
+		return -EINVAL;
+
+	dev = __dev_get_by_index(net, ifindex);
+	
+	if (!dev)
+		return -ENODEV;
+
+	memcpy(dev->interface_iden, ((pfx->s6_addr)+8), 8);
+
+	return 0;
+			  
+}
+
 /*
  *	Manual configuration of address on an interface
  */
@@ -2219,6 +2246,25 @@ static int inet6_addr_del(struct net *net, int ifindex, struct in6_addr *pfx,
 	return -EADDRNOTAVAIL;
 }
 
+int addrconf_add_ifid(struct net *net, void __user *arg)
+{
+	struct in6_ifreq ireq;
+	int err;
+
+	if (!capable(CAP_NET_ADMIN))
+		return -EPERM;
+
+	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))
+		return -EFAULT;
+
+	rtnl_lock();
+
+	err= inet6_ifid_add(net, ireq.ifr6_ifindex, &ireq.ifr6_addr,
+			     ireq.ifr6_prefixlen);
+	
+	rtnl_unlock();
+	return err;
+}
 
 int addrconf_add_ifaddr(struct net *net, void __user *arg)
 {

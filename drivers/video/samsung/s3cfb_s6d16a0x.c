@@ -9,10 +9,12 @@
 #include <linux/spi/spi.h>
 #include <linux/lcd.h>
 #include <linux/backlight.h>
+
+
 #include <plat/gpio-cfg.h>
-#include <plat/regs-fb.h>
-#include <mach/gpio-forte.h>
-#include <plat/gpio-cfg.h>
+#include <mach/gpio-chief.h>
+#include <mach/gpio-chief-settings.h>
+
 // TODO:FORTE_FROYO #include <plat/regs-lcd.h>
 
 #include "s3cfb.h"
@@ -25,11 +27,12 @@
 
 #define MAX_GAMMA_VALUE	24	// we have 25 levels. -> 16 levels -> 24 levels
 #define CRITICAL_BATTERY_LEVEL 5
+
 #if !defined(CONFIG_FB_S3C_S6D16A0X)
 #define GAMMASET_CONTROL //for 1.9/2.2 gamma control from platform
 #define ACL_ENABLE
 #endif
-static int bd_brightness = 0;
+
 /*********** for debug **********************************************************/
 #if 0
 #define gprintk(fmt, x... ) printk( "%s(%d): " fmt, __FUNCTION__ ,__LINE__, ## x)
@@ -81,7 +84,35 @@ extern void init_mdnie_class(void);
 
 
 static struct s5p_lcd lcd;
+#if 1 //for  chief
+static struct s3cfb_lcd s6d16a0x = {
+	.width = 320,
+	.height = 480,
+	.p_width = 52,
+	.p_height = 74,
+	.bpp = 32,
+	.freq = 60,
 
+	.timing = {
+		.h_fp = 30,
+		.h_bp = 22,
+		.h_sw = 8,
+		.v_fp = 32,
+		.v_fpe = 1,
+		.v_bp = 16,
+		.v_bpe = 1,
+		.v_sw = 16,
+	},
+
+	.polarity = {
+		.rise_vclk = 0,
+		.inv_hsync = 0,
+		.inv_vsync = 0,
+		.inv_vden = 0,
+	},
+};
+
+#else
 #ifdef CONFIG_FORTE_LCD_TUNING_00
 static struct s3cfb_lcd s6d16a0x = {
 	.width = 320,
@@ -137,8 +168,39 @@ static struct s3cfb_lcd s6d16a0x = {
 	},
 };
 #endif
-
+#endif
 ////////////////////////////////////////////////////////////////////////////////
+#if 1//for chief
+#define CASET		0x2A
+#define PASET		0x2B
+#define MADCTL		0x36
+#define COLMOD		0x3A
+#define TESCL		0x44
+#define TEON		0x35
+#define PASSWD1	0xF0	// level 2 command enable
+#define DISCTL		0xF2
+#define PWRCTL		0xF4
+#define VCMCTL		0xF5
+#define SRCCTL		0xF6
+#define IFCTL		0xF7
+#define PANELCTL	0xF8
+#define GAMMASEL	0xF9
+#define PGAMMACTL	0xFA
+#define NGAMMACTL	0xFB
+#define MIECTL1	0xC0
+#define BCMODE 	0xC1
+#define WRMIECTL2	0xC2
+#define WRBLCTL	0xC3
+#define PASSWD1	0xF0
+#define SLPOUT		0x11
+#define DISPON		0x29
+
+#define DISPOFF	0x28
+#define SLPIN		0x10
+#define WRCABC		0x55	// backlight control mode 
+#define PASSWD2	0xF0  // level 1 command enable(default)
+
+#else
 #define PASSWD2			0xF1
 #define DISCTL			0xF2
 #ifdef CONFIG_FORTE_LCD_TUNING_00
@@ -168,7 +230,37 @@ static struct s3cfb_lcd s6d16a0x = {
 #define DISPON			0x29
 #define DISPOFF			0x28
 #define SLPIN			0x10
+#endif
+#if 1// for chief
+static const u16	  CASET_PARAM[]    =   { 0x0100, 0x0100, 0x0101, 0x013F } ;
+static const u16	  PASET_PARAM[]    =   { 0x0100, 0x0100, 0x0101, 0x01DF } ;
+static const u16	  MADCTL_PARAM[]   =   { 0x0100 } ;
+static const u16	  COLMOD_PARAM[]   =   { 0x0177 } ;
+static const u16	  TESCL_PARAM[]    =   { 0x0100 } ;
+static const u16	  TEON_PARAM[]     =   { 0x0100 } ;
+static const u16	  PASSWD1_PARAM[]  =   { 0x015A, 0x015A } ;
+static const u16	  DISCTL_PARAM[]   =   { 0x013B, 0x014C, 0x010F, 0x0120, 0x0120, 0x0108, 0x0108, 0x0100, 0x0108, 0x0108, 0x0100, 0x0100, 0x0100, 0x0100, 0x014C, 0x0120, 0x0120, 0x0120, 0x0120 } ;
+static const u16	  PWRCTL_PARAM[]   =   { 0x0107, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0144, 0x0105, 0x0100, 0x0144, 0x0105 } ;
+static const u16	  VCMCTL_PARAM[]   =   { 0x0100, 0x0115, 0x0117, 0x0100, 0x0100, 0x0102, 0x0100, 0x0100, 0x0100, 0x0100, 0x0115, 0x0117 } ;
+static const u16	  SRCCTL_PARAM[]   =   { 0x0101, 0x0100, 0x0108, 0x0103, 0x0101, 0x0100, 0x0101, 0x0100, 0x0100 } ;
+static const u16	  IFCTL_PARAM[]    =   { 0x0148, 0x0181, 0x01F0, 0x0103, 0x0100 } ;
+static const u16	  PANELCTL_PARAM[] =   { 0x0155, 0x0100 } ;
+static const u16	  GAMMASEL_PARAM[] =   { 0x0127 } ;
+static const u16	  PGAMMACTL_PARAM[]=   { 0x010C, 0x0104, 0x0106, 0x011E, 0x011F, 0x0121, 0x0124, 0x0121, 0x012D, 0x012F, 0x012E, 0x012E, 0x010F, 0x0100, 0x0100, 0x0100 } ;
+static const u16	  NGAMMACTL_PARAM[]=   { 0x010C, 0x0104, 0x010F, 0x012E, 0x012E, 0x012F, 0x012D, 0x0121, 0x0124, 0x0121, 0x011F, 0x011E, 0x0106, 0x0100, 0x0100, 0x0100 } ;
+static const u16	  MIECTL1_PARAM[]  =   { 0x0180, 0x0180, 0x0110 } ;
+static const u16	  BCMODE_PARAM[]   =   { 0x0112 } ;
+static const u16	  WRMIECTL2_PARAM[]=   { 0x0108, 0x0100, 0x0100, 0x0101, 0x01DF, 0x0100, 0x0100, 0x0101, 0x013F } ;
+static const u16	  WRBLCTL_PARAM[]  =   { 0x0101, 0x0135, 0x0120 } ;
+static const u16	  PASSWD2_PARAM[]  =   { 0x01A5, 0x01A5 } ;
 
+static const u16	  WRCABC_PARAM[]   =   { 0x0100 } ;
+static const u16	  SLPOUT_PARAM[]   =   { } ;
+static const u16	  DISPON_PARAM[]   =   { } ;
+static const u16	  SLPIN_PARAM[]    =   { } ;
+static const u16	  DISPOFF_PARAM[]  =   { } ;
+
+#else
 #if 1    // heatup - reference EXCEL sheet
    #ifdef CONFIG_FORTE_LCD_TUNING_00
       static const u16    PASSWD2_PARAM[]   = { 0x015A, 0x015A } ;
@@ -251,7 +343,7 @@ static const u16    SLPOUT_PARAM[]    = {} ;
 static const u16    DISPOFF_PARAM[]   = { 0x0102, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100 } ;
 static const u16    SLPIN_PARAM[]     = { 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100 } ;
 #endif
-
+#endif
 #define DEF_LCD_CMD(_s_, _t_)           {_s_, ARRAY_SIZE(_s_##_PARAM), _s_##_PARAM, _t_}
 
 struct setting_table {
@@ -262,6 +354,30 @@ struct setting_table {
 };
 
 static const struct setting_table s6d16a0x_power_on_seq[] = {
+#if 1
+DEF_LCD_CMD(CASET, 0),
+DEF_LCD_CMD(PASET, 0),
+DEF_LCD_CMD(MADCTL, 0),
+DEF_LCD_CMD(COLMOD, 0),
+DEF_LCD_CMD(TESCL, 0),
+DEF_LCD_CMD(TEON, 0),
+DEF_LCD_CMD(PASSWD1, 0),
+DEF_LCD_CMD(DISCTL, 0),
+DEF_LCD_CMD(PWRCTL, 0),
+DEF_LCD_CMD(VCMCTL, 0),
+DEF_LCD_CMD(SRCCTL, 0),
+DEF_LCD_CMD(IFCTL, 0),
+DEF_LCD_CMD(PANELCTL, 0),
+DEF_LCD_CMD(GAMMASEL, 0),
+DEF_LCD_CMD(PGAMMACTL, 0),
+DEF_LCD_CMD(NGAMMACTL, 0),
+DEF_LCD_CMD(MIECTL1, 0),
+DEF_LCD_CMD(BCMODE, 0),
+DEF_LCD_CMD(WRMIECTL2, 0),
+DEF_LCD_CMD(WRBLCTL, 0),
+DEF_LCD_CMD(PASSWD2, 0),
+DEF_LCD_CMD(WRCABC, 0)
+#else
     DEF_LCD_CMD(PASSWD2, 0),
 #ifdef CONFIG_FORTE_LCD_TUNING_00
 	DEF_LCD_CMD(DISCTL_PWRON, 0),
@@ -287,6 +403,7 @@ static const struct setting_table s6d16a0x_power_on_seq[] = {
 	DEF_LCD_CMD(PASET, 0),
 	DEF_LCD_CMD(COLMOD, 0),
 	DEF_LCD_CMD(WRCTRLD, 0)
+#endif
 };
 
 static const struct setting_table s6d16a0x_disp_on_seq[] = {
@@ -298,13 +415,13 @@ static const struct setting_table s6d16a0x_sleep_out_seq[] = {
 } ;
 
 static const struct setting_table s6d16a0x_disp_off_seq[] = {
-	DEF_LCD_CMD(DISPOFF, 40)
+	DEF_LCD_CMD(DISPOFF, 50)
 };
 
 static const struct setting_table s6d16a0x_sleep_in_seq[] = {
 	DEF_LCD_CMD(SLPIN, 120)
 };
-#ifdef CONFIG_FORTE_LCD_TUNING_00
+#if 0//for chief def CONFIG_FORTE_LCD_TUNING_00
 static const struct setting_table s6d16a0x_sleep_in_pre_seq[] = {
    DEF_LCD_CMD(PASSWD2, 0),
    DEF_LCD_CMD(DISCTL_SLPIN, 0),
@@ -348,6 +465,7 @@ static void s6d16a0x_write_cmd_params(const struct setting_table *table)
     s6d16a0x_spi_write(table->command) ;
     for (n = table->param_num, p_param = table->p_param ; n ; n--, p_param++)
         s6d16a0x_spi_write(*p_param) ;
+
 	msleep(table->wait_ms);
 }
 
@@ -393,8 +511,6 @@ void s6d16a0x_lcd_cfg_gpio(void)
 		s3c_gpio_setpull(S5PV210_GPF3(i), S3C_GPIO_PULL_NONE);
 	}
 
-
-#if 1    // heatup@disys 20100817   REV01 BOARD
 	/* DISPLAY_CS */
 	s3c_gpio_cfgpin(DISPLAY_CS, S3C_GPIO_OUTPUT);
 	/* DISPLAY_CLK */
@@ -410,28 +526,9 @@ void s6d16a0x_lcd_cfg_gpio(void)
 	s3c_gpio_setpull(DISPLAY_SI, S3C_GPIO_PULL_NONE);
 
    /* MLCD_RST */
+	// for chief
 	s3c_gpio_cfgpin(GPIO_MLCD_RST, S3C_GPIO_SFN(1));
 	s3c_gpio_setpull(GPIO_MLCD_RST, S3C_GPIO_PULL_NONE);
-
-#else    // emul board
-	/* DISPLAY_CS */
-	s3c_gpio_cfgpin(GPIO_DISPLAY_CS, S3C_GPIO_SFN(1));
-	/* DISPLAY_CLK */
-	s3c_gpio_cfgpin(GPIO_DISPLAY_CLK, S3C_GPIO_SFN(1));
-	/* DISPLAY_SI */
-	s3c_gpio_cfgpin(GPIO_DISPLAY_SI, S3C_GPIO_SFN(1));
-
-	/* DISPLAY_CS */
-	s3c_gpio_setpull(GPIO_DISPLAY_CS, S3C_GPIO_PULL_NONE);
-	/* DISPLAY_CLK */
-	s3c_gpio_setpull(GPIO_DISPLAY_CLK, S3C_GPIO_PULL_NONE);
-	/* DISPLAY_SI */
-	s3c_gpio_setpull(GPIO_DISPLAY_SI, S3C_GPIO_PULL_NONE);
-
-   /* MLCD_RST */
-	s3c_gpio_cfgpin(GPIO_MLCD_RST, S3C_GPIO_SFN(1));
-	s3c_gpio_setpull(GPIO_MLCD_RST, S3C_GPIO_PULL_NONE);
-#endif
 
 	msleep(1);
 
@@ -440,13 +537,25 @@ void s6d16a0x_lcd_cfg_gpio(void)
 ////////////////////////////////////////////////////////////////////////////////
 void s6d16a0x_lcd_reset(void)
 {
-   gpio_set_value(GPIO_MLCD_RST,GPIO_LEVEL_HIGH);
+#if 1
+    s3c_gpio_cfgpin(GPIO_MLCD_RST, S3C_GPIO_SFN(1));
+	msleep(10);
+	gpio_set_value(GPIO_MLCD_RST, 1);
+	msleep(20);
+	gpio_set_value(GPIO_MLCD_RST, 0);
+	msleep(20); // more than 10msec
+	gpio_set_value(GPIO_MLCD_RST, 1);
+	msleep(20); // wait more than 30 ms after releasing the system reset( > 10msec) and input RGB interface signal (RGB pixel datga, sync signals,dot clock...) ( >= 20msec)
+
+#else
+   gpio_set_value(GPIO_MLCD_RST, GPIO_LEVEL_HIGH);
    msleep(1);
 
-   gpio_set_value(GPIO_MLCD_RST,GPIO_LEVEL_LOW);
+   gpio_set_value(GPIO_MLCD_RST, GPIO_LEVEL_LOW);
    msleep(1);
-   gpio_set_value(GPIO_MLCD_RST,GPIO_LEVEL_HIGH);
+   gpio_set_value(GPIO_MLCD_RST, GPIO_LEVEL_HIGH);
    msleep(10);
+#endif
 }
 
 int IsLDIEnabled(void)
@@ -466,13 +575,17 @@ void s6d16a0x_ldi_init(void)
 {
     FBDBG_TRACE();
 
-#if 0   // TODO:FORTE_FROYO
-    s6d16a0x_lcd_cfg_gpio();
-    s6d16a0x_lcd_reset();
+#if 1   // TODO:FORTE_FROYO
+    //s6d16a0x_lcd_cfg_gpio();
+//    s6d16a0x_lcd_reset();
+printk(KERN_ERR "%s,THIS IS LCD ON \n", __FUNCTION__);
+
 #endif
+    msleep(20);   // heatup
     s6d16a0x_write_sequence(s6d16a0x_power_on_seq) ;
     s6d16a0x_write_sequence(s6d16a0x_sleep_out_seq) ;
     s6d16a0x_write_sequence(s6d16a0x_disp_on_seq) ;
+    msleep(1);   // heatup
 
     SetLDIEnabledFlag(1);
 }
@@ -483,7 +596,7 @@ void s6d16a0x_ldi_wake_up(void)
     FBDBG_TRACE();
 
 #ifdef CONFIG_FORTE_LCD_TUNING_00
-    s6d16a0x_write_sequence(s6d16a0x_sleep_out_pre_seq) ;
+//    s6d16a0x_write_sequence(s6d16a0x_sleep_out_pre_seq) ;
 #endif
     s6d16a0x_write_sequence(s6d16a0x_sleep_out_seq) ;
     s6d16a0x_write_sequence(s6d16a0x_disp_on_seq) ;
@@ -495,7 +608,7 @@ void s6d16a0x_ldi_stand_by(void)
     FBDBG_TRACE();
 
 #ifdef CONFIG_FORTE_LCD_TUNING_00
-    s6d16a0x_write_sequence(s6d16a0x_sleep_in_pre_seq);		// heatup
+//    s6d16a0x_write_sequence(s6d16a0x_sleep_in_pre_seq);		// heatup
 #endif
     s6d16a0x_write_sequence(s6d16a0x_disp_off_seq) ;
     s6d16a0x_write_sequence(s6d16a0x_sleep_in_seq) ;
@@ -533,6 +646,7 @@ void s3cfb_set_lcd_info(struct s3cfb_global *ctrl)
 static int s5p_lcd_set_power(struct lcd_device *ld, int power)
 {
     FBDBG_TRACE() ;
+
 	if(power)
 	{
         s6d16a0x_write_sequence(s6d16a0x_disp_on_seq) ;
@@ -779,7 +893,7 @@ static int s5p_bl_update_status(struct backlight_device* bd)
 
 	if(IsLDIEnabled())
 	{
-#if 0
+	#if 0
 		if (get_battery_level() <= CRITICAL_BATTERY_LEVEL && !is_charging_enabled())
 		{
 			if (bl > DIM_BL)
@@ -976,14 +1090,14 @@ static int __init s6d16a0x_probe(struct spi_device *spi)
 	lcd.g_spi = spi;
 	lcd.lcd_dev = lcd_device_register("s5p_lcd",&spi->dev,&lcd,&s5p_lcd_ops);
 #if !defined(CONFIG_FB_S3C_S6D16A0X)
-//	lcd.bl_dev = backlight_device_register("s5p_bl",&spi->dev,&lcd,&s5p_bl_ops);
-//	lcd.bl_dev->props.max_brightness = 255;
+	lcd.bl_dev = backlight_device_register("s5p_bl",&spi->dev,&lcd,&s5p_bl_ops);
+	lcd.bl_dev->props.max_brightness = 255;
 #endif
 	dev_set_drvdata(&spi->dev,&lcd);
 
     SetLDIEnabledFlag(1);
 
-//s6d16a0x_ldi_init() ; // TODO:FORTE_TEST
+    //s6d16a0x_ldi_init() ; // TODO:FORTE_TEST
     //if (ret)
     //   printk(KERN_ERR "s6d16a0x not found\n") ;
 

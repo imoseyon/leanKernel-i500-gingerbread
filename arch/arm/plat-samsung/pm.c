@@ -18,11 +18,10 @@
 #include <linux/delay.h>
 #include <linux/serial_core.h>
 #include <linux/io.h>
-#include <mach/gpio-aries.h>
+
 #include <asm/cacheflush.h>
 #include <mach/hardware.h>
 #include <mach/map.h>
-#include <mach/gpio-bank.h>
 
 #include <plat/regs-serial.h>
 #include <mach/regs-clock.h>
@@ -312,7 +311,7 @@ void (*pm_cpu_restore)(void);
 static int s3c_pm_enter(suspend_state_t state)
 {
 	static unsigned long regs_save[16];
-	unsigned int gpio;
+
 	/* ensure the debug is initialised (if enabled) */
 
 	s3c_pm_debug_init();
@@ -343,14 +342,6 @@ static int s3c_pm_enter(suspend_state_t state)
 	S3C_PMDBG("s3c_sleep_save_phys=0x%08lx\n", s3c_sleep_save_phys);
 
 	/* save all necessary core registers not covered by the drivers */
-
-
-#if 0
-	/* control power of moviNAND at PM and add 700ms delay for stabilization of moviNAND. */
-    gpio = readl(S5PV210_GPJ2DAT);
-    writel(gpio & (~0x80), S5PV210_GPJ2DAT);
-    mdelay(700);
-#endif 
 
 	s3c_pm_save_gpios();
 	s3c_pm_save_uarts();

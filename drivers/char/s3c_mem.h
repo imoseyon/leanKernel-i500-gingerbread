@@ -35,6 +35,8 @@
 #define S3C_MEM_CACHEABLE_SHARE_ALLOC	_IOWR(MEM_IOCTL_MAGIC, 317,	\
 					      struct s3c_mem_alloc)
 
+#define S3C_MEM_CACHE_INV           _IOWR(MEM_IOCTL_MAGIC, 330, struct s3c_mem_dma_param)
+
 #define MEM_ALLOC			1
 #define MEM_ALLOC_SHARE			2
 #define MEM_ALLOC_CACHEABLE		3

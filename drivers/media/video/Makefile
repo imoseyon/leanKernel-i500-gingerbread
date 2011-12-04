@@ -73,21 +73,11 @@ obj-$(CONFIG_VIDEO_OV7670) 	+= ov7670.o
 obj-$(CONFIG_VIDEO_TCM825X) += tcm825x.o
 obj-$(CONFIG_VIDEO_TVEEPROM) += tveeprom.o
 obj-$(CONFIG_VIDEO_MT9V011) += mt9v011.o
-
-ifeq ($(TARGET_PRODUCT),SCH-I500)
-obj-$(CONFIG_VIDEO_CE147) += ce147-atlas.o
-else ifeq ($(TARGET_PRODUCT),SCH-R910)
-obj-$(CONFIG_VIDEO_CE147) +=ce147-forte.o
-else ifeq ($(TARGET_PRODUCT),SCH-I500R)
-obj-$(CONFIG_VIDEO_CE147) += ce147-atlas.o
-else ifeq ($(TARGET_PRODUCT),SCH-I400)
-obj-$(CONFIG_VIDEO_CE147) += ce147-garnett.o
-else ifeq ($(TARGET_PRODUCT),SPH-D700)
-obj-$(CONFIG_VIDEO_CE147) += ce147-victory.o
-else
 obj-$(CONFIG_VIDEO_CE147) += ce147.o
-endif
-
+obj-$(CONFIG_VIDEO_M5MO_LS)	+= m5mo_ls.o
+obj-$(CONFIG_VIDEO_M5MO_MIPI) += m5mo_mipi.o
+obj-$(CONFIG_VIDEO_S5K5AAFA) += s5k5aafa.o
+obj-$(CONFIG_VIDEO_ISX005)	+= isx005.o
 obj-$(CONFIG_SOC_CAMERA_MT9M001)	+= mt9m001.o
 obj-$(CONFIG_SOC_CAMERA_MT9M111)	+= mt9m111.o
 obj-$(CONFIG_SOC_CAMERA_MT9T031)	+= mt9t031.o
@@ -100,7 +90,12 @@ obj-$(CONFIG_SOC_CAMERA_TW9910)		+= tw9910.o
 
 obj-$(CONFIG_VIDEO_S5KA3DFX) 	+= s5ka3dfx.o
 obj-$(CONFIG_VIDEO_S5K4ECGX) 	+= s5k4ecgx.o
-obj-$(CONFIG_VIDEO_S5K5CCGX) 	+= s5k5ccgx.o
+obj-$(CONFIG_VIDEO_SR030PC30) 	+= sr030pc30.o
+ifeq ($(CONFIG_TIKAL_USCC),y)
+obj-$(CONFIG_VIDEO_SR130PC10) 	+= sr130pc10_tikal.o
+else
+obj-$(CONFIG_VIDEO_SR130PC10) 	+= sr130pc10.o
+endif
 # And now the v4l2 drivers:
 
 obj-$(CONFIG_VIDEO_BT848) += bt8xx/

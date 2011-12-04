@@ -4394,9 +4394,6 @@ void otg_phy_init(void)
 }
 EXPORT_SYMBOL(otg_phy_init);
 
-/* USB Control request data struct must be located here for DMA transfer */
-struct usb_ctrlrequest usb_ctrl __attribute__((aligned(64)));
-
 /* OTG PHY Power Off */
 void otg_phy_off(void)
 {

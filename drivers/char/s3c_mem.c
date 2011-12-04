@@ -37,6 +37,9 @@
 #include <mach/map.h>
 #include <mach/hardware.h>
 
+#include <asm/cacheflush.h>
+#include <linux/dma-mapping.h>
+
 #include "s3c_mem.h"
 
 static int flag;
@@ -276,6 +279,19 @@ int s3c_mem_ioctl(struct inode *inode, struct file *file,
 		}
 
 		mutex_unlock(&mem_share_free_lock);
+
+		break;
+
+	case S3C_MEM_CACHE_INV:
+		{
+			struct s3c_mem_dma_param param;
+			if (copy_from_user(&param, (void __user *)arg, sizeof(struct s3c_mem_dma_param)))
+				return -EFAULT;
+
+			dmac_map_area((param.src_addr)&PAGE_MASK, param.size, DMA_FROM_DEVICE);
+			//invalidate_kernel_vmap_range((void *)((param.src_addr)&PAGE_MASK), param.size);
+			return  0;
+		}
 
 		break;
 

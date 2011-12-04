@@ -29,14 +29,7 @@ obj-$(CONFIG_REGULATOR)		+= regulator/
 obj-y				+= char/
 
 # gpu/ comes after char for AGP vs DRM startup
-#obj-y				+= gpu/
-
-ifeq ($(CONFIG_MACH_ATLAS),y)
-obj-y                   += gpu_atlas/
-else
-obj-y                   += gpu/
-endif
-
+obj-y				+= gpu/
 
 obj-$(CONFIG_CONNECTOR)		+= connector/
 
@@ -46,6 +39,7 @@ obj-$(CONFIG_FB_INTEL)          += video/intelfb/
 
 obj-y				+= serial/
 obj-$(CONFIG_PARPORT)		+= parport/
+
 obj-y				+= base/ block/ misc/ mfd/
 obj-$(CONFIG_NUBUS)		+= nubus/
 obj-y				+= macintosh/
@@ -53,6 +47,7 @@ obj-$(CONFIG_IDE)		+= ide/
 obj-$(CONFIG_SCSI)		+= scsi/
 obj-$(CONFIG_ATA)		+= ata/
 obj-$(CONFIG_MTD)		+= mtd/
+obj-$(CONFIG_TINY_FSR)          += tfsr/
 obj-$(CONFIG_SPI)		+= spi/
 obj-y				+= net/
 obj-$(CONFIG_ATM)		+= atm/
@@ -119,6 +114,16 @@ obj-$(CONFIG_SSB)		+= ssb/
 obj-$(CONFIG_VHOST_NET)		+= vhost/
 obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
+
+ifeq ($(CONFIG_MACH_CHIEF),y)
+obj-$(CONFIG_LTESPI)		+= ltespi/
+else
+obj-$(CONFIG_SAMSUNG_PHONE_TTY) += cdma_dpram/
+obj-m				+= wtlfota_dpram/
+obj-$(CONFIG_LTESPI)		+= ltespi/
+endif
+
 obj-y				+= platform/
 obj-y				+= ieee802154/
 obj-y				+= level/
+

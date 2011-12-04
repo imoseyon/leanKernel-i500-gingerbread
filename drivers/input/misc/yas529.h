@@ -239,7 +239,6 @@ STATIC int geomagnetic_driver_init(struct geomagnetic_hwdep_driver *hwdep_driver
 #ifndef _YAS529_LINUX_H_
 #define _YAS529_LINUX_H_
 
-
 #define GEOMAGNETIC_I2C_DEVICE_NAME	"yas529"
 #define GEOMAGNETIC_DEVICE_NAME		"yas529"
 #define GEOMAGNETIC_INPUT_NAME		"magnetic_sensor"

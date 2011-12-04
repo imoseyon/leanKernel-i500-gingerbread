@@ -27,19 +27,11 @@
 #include <asm/mach/arch.h>
 #include <mach/param.h>
 #include <mach/gpio.h>
-#if defined(CONFIG_MACH_ATLAS)
-#include <mach/gpio-atlas.h>
-#elif defined(CONFIG_MACH_FORTE)
-#include <mach/gpio-forte.h>
-#else 
-#include <mach/gpio-victory.h>
-#endif
 #include <mach/sec_switch.h>
 #include <mach/regs-clock.h>
 #include <mach/regs-gpio.h>
 #include <plat/gpio-cfg.h>
-#include <plat/devs.h>
-#include <asm/mach-types.h>
+
 struct sec_switch_struct {
 	struct sec_switch_platform_data *pdata;
 	int switch_sel;
@@ -51,35 +43,8 @@ struct sec_switch_wq {
 	struct list_head entry;
 };
 
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-extern void samsung_enable_function(int mode);
-#endif
-
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_ 
-extern int askon_status;
-#endif
-
-
 /* for sysfs control (/sys/class/sec/switch/) */
 extern struct device *switch_dev;
-
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-extern unsigned int system_rev;
-static ssize_t HWrevision_show(struct device *dev, struct device_attribute *attr, char *buf){
-        return sprintf(buf, "%x\n", system_rev );
-}
-
-static ssize_t HWrevision_store(
-                struct device *dev, struct device_attribute *attr,
-                const char *buf, size_t size){
-    printk(KERN_INFO "[SEC SWITCH]\n ");
-
-        return 0;
-}
-/*sysfs for HW Board revision */
-static DEVICE_ATTR(HWrevision, 0664, HWrevision_show, HWrevision_store);
-#endif //CONFIG_S5PV210_GARNETT_DELTA
-
 
 static void usb_switch_mode(struct sec_switch_struct *secsw, int mode)
 {
@@ -92,12 +57,7 @@ static void usb_switch_mode(struct sec_switch_struct *secsw, int mode)
 		if (secsw->pdata && secsw->pdata->set_vbus_status)
 			secsw->pdata->set_vbus_status((u8)USB_VBUS_CP_ON);
 		mdelay(10);
-		if(machine_is_victory())
-                fsa9480_manual_switching(SWITCH_PORT_AUDIO);
-                else if (machine_is_atlas())
-                fsa9480_manual_switching(SWITCH_PORT_VAUDIO);
-                else if (machine_is_forte())
-                fsa9480_manual_switching(SWITCH_PORT_AUDIO);
+		fsa9480_manual_switching(SWITCH_PORT_VAUDIO);
 	}
 }
 
@@ -208,11 +168,11 @@ static ssize_t disable_vbus_store(struct device *dev, struct device_attribute *a
 	return size;
 }
 
-static DEVICE_ATTR(uart_sel, 0664, uart_sel_show, uart_sel_store);
-static DEVICE_ATTR(usb_sel, 0664, usb_sel_show, usb_sel_store);
-static DEVICE_ATTR(usb_state, 0664, usb_state_show, usb_state_store);
+static DEVICE_ATTR(uart_sel,     0664, uart_sel_show,     uart_sel_store);
+static DEVICE_ATTR(usb_sel,      0664, usb_sel_show,      usb_sel_store);
+static DEVICE_ATTR(usb_state,    0664, usb_state_show,    usb_state_store);
 static DEVICE_ATTR(disable_vbus, 0664, disable_vbus_show, disable_vbus_store);
-extern int adb_enabled;
+
 static void sec_switch_init_work(struct work_struct *work)
 {
 	struct delayed_work *dw = container_of(work, struct delayed_work, work);
@@ -220,7 +180,6 @@ static void sec_switch_init_work(struct work_struct *work)
 	struct sec_switch_struct *secsw = wq->sdata;
 	int usb_sel = 0;
 	int uart_sel = 0;
-	int samsung_kies_sel,ums_sel,mtp_sel,vtp_sel,askon_sel;
 
 	if (sec_get_param_value &&
 	    secsw->pdata &&
@@ -238,16 +197,9 @@ static void sec_switch_init_work(struct work_struct *work)
 
 	usb_sel = secsw->switch_sel & USB_SEL_MASK;
 	uart_sel = secsw->switch_sel & UART_SEL_MASK;
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-        samsung_kies_sel = (secsw->switch_sel & (int)(USB_SAMSUNG_KIES_MASK)) >> 2;
-        ums_sel = (secsw->switch_sel & (int)(USB_UMS_MASK)) >> 3;
-        mtp_sel = (secsw->switch_sel & (int)(USB_MTP_MASK)) >> 4;
-        vtp_sel = (secsw->switch_sel & (int)(USB_VTP_MASK)) >> 5;
-        askon_sel = (secsw->switch_sel & (int)(USB_ASKON_MASK)) >> 6;
-#endif
-
 
 	/* init UART/USB path */
+
 	if (usb_sel)
 		usb_switch_mode(secsw, SWITCH_PDA);
 	else
@@ -257,34 +209,6 @@ static void sec_switch_init_work(struct work_struct *work)
 		gpio_set_value(GPIO_UART_SEL, 1);
 	else
 		gpio_set_value(GPIO_UART_SEL, 0);
-
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-	if(!adb_enabled)
-{
-
-       if(samsung_kies_sel){
-               printk("$$$$$$$$$$$$$$%s: samsung_kies_sel ON\n", __func__);
-               samsung_enable_function(USBSTATUS_SAMSUNG_KIES);
-       }
-        else if(mtp_sel){
-               printk("$$$$$$$$$$$$$$$$%s: mtp_sel ON\n", __func__);
-               samsung_enable_function(USBSTATUS_MTPONLY);
-        }
-        else if(ums_sel){
-               printk("$$$$$$$$$$$$$$$$%s: ums_sel ON\n", __func__);
-               samsung_enable_function(USBSTATUS_UMS);
-        }
-        else if(vtp_sel){
-               samsung_enable_function(USBSTATUS_VTP);
-        }
-        else if(askon_sel){
-               printk("$$$$$$$$$$$$$$$$%s: askon_sel  ON\n", __func__);
-               samsung_enable_function(USBSTATUS_ASKON);
-               askon_status = 1;
-        }
-
-}
-#endif
 }
 
 static int sec_switch_probe(struct platform_device *pdev)
@@ -322,11 +246,6 @@ static int sec_switch_probe(struct platform_device *pdev)
 
 	if (device_create_file(switch_dev, &dev_attr_disable_vbus) < 0)
 		pr_err("Failed to create device file(%s)!\n", dev_attr_usb_state.attr.name);
-
-#ifdef	CONFIG_S5PV210_GARNETT_DELTA
-	if (device_create_file(switch_dev, &dev_attr_HWrevision) < 0)
-                pr_err("Failed to create device file(%s)!\n", dev_attr_HWrevision.attr.name);
-#endif
 
 	/* run work queue */
 	wq = kmalloc(sizeof(struct sec_switch_wq), GFP_ATOMIC);

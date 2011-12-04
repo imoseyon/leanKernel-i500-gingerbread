@@ -17,8 +17,11 @@
 
 struct wm8994_platform_data {
 	int ldo;
-	int ear_sel;
+#ifdef CONFIG_MACH_AEGIS
+	void (*set_mic_bias)(bool on,int value);
+#else
 	void (*set_mic_bias)(bool on);
+#endif
 };
 
 #endif

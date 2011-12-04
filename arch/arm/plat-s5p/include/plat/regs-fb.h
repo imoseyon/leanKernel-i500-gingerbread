@@ -121,21 +121,6 @@
 #define S3C_WPALCON_H		S3C_LCDREG(0x019C)	/* Window Palette control */
 #define S3C_WPALCON_L		S3C_LCDREG(0x01A0)	/* Window Palette control */
 
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-#define S3C_TRIGCON             S3C_LCDREG(0x1A4)       /* I80 / RGB Trigger Control Regiter    */
-#define S3C_I80IFCONA0          S3C_LCDREG(0x01B0)      /* I80 Interface control 0 for Main LDI */
-#define S3C_I80IFCONA1          S3C_LCDREG(0x01B4)      /* I80 Interface control 0 for Sub LDI */
-#define S3C_I80IFCONB0          S3C_LCDREG(0x1B8)       /* I80 Interface control 1 for Main LDI */
-#define S3C_I80IFCONB1          S3C_LCDREG(0x1BC)       /* I80 Interface control 1 for Sub LDI  */
-#define S3C_LDI_CMDCON0         S3C_LCDREG(0x1D0)       /* I80 Interface LDI Command Control 0  */
-#define S3C_LDI_CMDCON1         S3C_LCDREG(0x1D4)       /* I80 Interface LDI Command Control 1  */
-#define S3C_SIFCCON0            S3C_LCDREG(0x1E0)       /* LCD i80 System Interface Command Control 0   */
-#define S3C_SIFCCON1            S3C_LCDREG(0x1E4)       /* LCD i80 System Interface Command Control 1   */
-#define S3C_SIFCCON2            S3C_LCDREG(0x1E8)       /* LCD i80 System Interface Command Control 2   */
-#endif
-
-
-
 #define S3C_VIDW0ALPHA0		S3C_LCDREG(0x0200)	/* Window 0 alpha value 0 */
 #define S3C_VIDW0ALPHA1		S3C_LCDREG(0x0204)	/* Window 0 alpha value 1 */
 #define S3C_VIDW1ALPHA0		S3C_LCDREG(0x0208)	/* Window 1 alpha value 0 */
@@ -152,48 +137,6 @@
 #define S3C_BLENDEQ3		S3C_LCDREG(0x024C)	/* Window 3 blending equation control */
 #define S3C_BLENDEQ4		S3C_LCDREG(0x0250)	/* Window 4 blending equation control */
 #define S3C_BLENDCON		S3C_LCDREG(0x0260)	/* Blending control */
-
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-#define S3C_DUALRGB             S3C_LCDREG(0x027C)      /* DUALRGB Interface Setting Register */
-
-#define S3C_LDI_CMD0            S3C_LCDREG(0x0280)      // LCD I80 Interface Command 0
-#define S3C_LDI_CMD1            S3C_LCDREG(0x0284)      // LCD I80 Interface Command 1
-#define S3C_LDI_CMD2            S3C_LCDREG(0x0288)      // LCD I80 Interface Command 2
-#define S3C_LDI_CMD3            S3C_LCDREG(0x028C)      // LCD I80 Interface Command 3
-#define S3C_LDI_CMD4            S3C_LCDREG(0x0290)      // LCD I80 Interface Command 4
-#define S3C_LDI_CMD5            S3C_LCDREG(0x0294)      // LCD I80 Interface Command 5
-#define S3C_LDI_CMD6            S3C_LCDREG(0x0298)      // LCD I80 Interface Command 6
-#define S3C_LDI_CMD7            S3C_LCDREG(0x029C)      // LCD I80 Interface Command 7
-#define S3C_LDI_CMD8            S3C_LCDREG(0x02A0)      // LCD I80 Interface Command 8
-#define S3C_LDI_CMD9            S3C_LCDREG(0x02A4)      // LCD I80 Interface Command 9
-#define S3C_LDI_CMD10           S3C_LCDREG(0x02A8)      // LCD I80 Interface Command 10
-#define S3C_LDI_CMD11           S3C_LCDREG(0x02AC)      // LCD I80 Interface Command 11
-
-
-/* DUALRGB */
-#define S3C_DUALRGB_BYPASS_SINGLE               (0x00 << 0)
-#define S3C_DUALRGB_BYPASS_DUAL                 (0x01 << 0)
-#define S3C_DUALRGB_MIE_DUAL                    (0x10 << 0)
-#define S3C_DUALRGB_MIE_SINGLE                  (0x11 << 0)
-#define S3C_DUALRGB_LINESPLIT                   (0x0 << 2)
-#define S3C_DUALRGB_FRAMESPLIT                  (0x1 << 2)
-#define S3C_DUALRGB_SUB_CNT(x)                  ((x & 0xfff) << 4)
-#define S3C_DUALRGB_VDEN_EN_DISABLE             (0x0 << 16)
-#define S3C_DUALRGB_VDEN_EN_ENABLE              (0x1 << 16)
-#define S3C_DUALRGB_MAIN_CNT(x)                 ((x & 0xfff) << 18)
-
-/* I80IFCONA0 and I80IFCONA1 */
-#define S3C_LCD_CS_SETUP(x)                     (((x) & 0xf) << 16)
-#define S3C_LCD_WR_SETUP(x)                     (((x) & 0xf) << 12)
-#define S3C_LCD_WR_ACT(x)                       (((x) & 0xf) << 8)
-#define S3C_LCD_WR_HOLD(x)                      (((x) & 0xf) << 4)
-#define S3C_RSPOL_LOW                           (0 << 2)
-#define S3C_RSPOL_HIGH                          (1 << 2)
-#define S3C_I80IFEN_DISABLE                     (0 << 0)
-#define S3C_I80IFEN_ENABLE                      (1 << 0)
-#endif
-
-
 
 /*
  * Bit Definitions
@@ -213,14 +156,6 @@
 #define S3C_VIDCON0_VIDOUT_WB_I80LDI0		(6 << 26)
 #define S3C_VIDCON0_VIDOUT_WB_I80LDI1		(7 << 26)
 #define S3C_VIDCON0_VIDOUT_MASK			(7 << 26)
-
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-#define S3C_VIDCON0_VIDOUT_L0_DATA16(x)         (((x) & 0x7) << 20)
-#define S3C_VIDCON0_VIDOUT_RGSPSEL_SERIAL       (1 << 18)
-#define S3C_VIDCON0_VIDOUT_RGSPSEL_PARALLEL     (0 << 18)
-#endif
-
-
 #define S3C_VIDCON0_PNRMODE_RGB_P		(0 << 17)
 #define S3C_VIDCON0_PNRMODE_BGR_P		(1 << 17)
 #define S3C_VIDCON0_PNRMODE_RGB_S		(2 << 17)
@@ -259,6 +194,8 @@
 #define S3C_VIDCON2_EN601_DISABLE		(0 << 23)
 #define S3C_VIDCON2_EN601_ENABLE		(1 << 23)
 #define S3C_VIDCON2_EN601_MASK			(1 << 23)
+#define S5P_VIDCON2_RGB_ORDER_E(x)   		(((x)&0x7)<<19)
+#define S5P_VIDCON2_RGB_ORDER_O(x)   		(((x)&0x7)<<16)
 #define S3C_VIDCON2_WB_DISABLE			(0 << 15)
 #define S3C_VIDCON2_WB_ENABLE			(1 << 15)
 #define S3C_VIDCON2_WB_MASK			(1 << 15)
@@ -362,15 +299,10 @@
 /* WINSHMAP */
 #define S3C_WINSHMAP_PROTECT(x)			(((x) & 0x1f) << 10)
 #define S3C_WINSHMAP_CH_ENABLE(x)		(1 << (x))
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-#define S3C_WINSHMAP_CH_DISABLE(x)              (0 << (x))
-#define S3C_WINSHMAP_LOCAL_ENABLE(x)            (1 << (x + 5))
-#define S3C_WINSHMAP_LOCAL_DISABLE(x)           (0 << (x + 5))
-#else
 #define S3C_WINSHMAP_CH_DISABLE(x)		(1 << (x))
 #define S3C_WINSHMAP_LOCAL_ENABLE(x)		(0x20 << (x))
 #define S3C_WINSHMAP_LOCAL_DISABLE(x)		(0x20 << (x))
-#endif
+
 
 /* VIDOSDxA, VIDOSDxB */
 #define S3C_VIDOSD_LEFT_X(x)			(((x) & 0x7ff) << 11)
@@ -462,14 +394,5 @@
 
 /* WxKEYCON1 (1~4) */
 #define S3C_KEYCON1_COLVAL(x)			(((x) & 0xffffff) << 0)
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-/* I80/RGB Trigger Control register - TRIGCON */
-#define S3C_TRIGCON_SWFRSTATUS_REQUESTED                (1<<2)
-#define S3C_TRIGCON_SWFRSTATUS_NOT_REQUESTED            (0<<2)
-#define S3C_TRIGCON_SWTRGCMD                            (1<<1)
-#define S3C_TRIGCON_TRGMODE_ENABLE                      (1<<0)
-#define S3C_TRIGCON_TRGMODE_DISABLE                     (0<<0)
-#endif
-
 
 #endif /* _REGS_FB_H */

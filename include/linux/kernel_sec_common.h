@@ -17,6 +17,7 @@
 
 /* AP -> CP : AP Crash Ind */
 #define KERNEL_SEC_DUMP_AP_DEAD_INDICATOR	0xABCD00C9
+#define KERNEL_SEC_DUMP_AP_DEAD_INDICATOR_DPRAM	0xC9
 /* CP -> AP : CP ready for uplaod mode */
 #define KERNEL_SEC_DUMP_AP_DEAD_ACK		0xCACAEDED
 
@@ -155,7 +156,7 @@ typedef enum {
 	UPLOAD_CAUSE_FORCED_UPLOAD	= 0x00000022,
 	UPLOAD_CAUSE_CP_ERROR_FATAL	= 0x000000CC,
 	UPLOAD_CAUSE_USER_FAULT		= 0x0000002F,
-	BLK_UART_MSG_FOR_FACTRST_2ND_ACK = 0x00000088,
+	BLK_UART_MSG_FOR_FACTRST_2ND_ACK= 0x00000088,
 } kernel_sec_upload_cause_type;
 
 #define KERNEL_SEC_UPLOAD_CAUSE_MASK     0x000000FF
@@ -193,7 +194,7 @@ extern int kernel_sec_get_debug_level_from_param(void);
 extern int kernel_sec_get_debug_level(void);
 
 extern void dump_debug_info_forced_ramd_dump(void);
-extern void kernel_sec_set_upload_magic_number_final(void);
+
 #define KERNEL_SEC_LEN_BUILD_TIME 16
 #define KERNEL_SEC_LEN_BUILD_DATE 16
 

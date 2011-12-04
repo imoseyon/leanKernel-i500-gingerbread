@@ -16,9 +16,6 @@
 #include <plat/map-base.h>
 #include <plat/map-s5p.h>
 
-#define S5PV210_SZ_DSIM        (1*1024*1024)
-#define S5PV210_PA_DSIM        (0xFA500000)
-
 #define S5PC110_PA_ONENAND	(0xB0000000)
 #define S5PC110_PA_ONENAND_DMA	(0xB0600000)
 
@@ -27,6 +24,8 @@
 
 #define S5PV210_PA_SYSCON	(0xE0100000)
 #define S5P_PA_SYSCON		S5PV210_PA_SYSCON
+#define S5PV210_VA_SYSCON       S3C_VA_SYS
+#define S5PV210_SZ_SYSCON       SZ_2M  
 
 #define S5PV210_PA_GPIO		(0xE0200000)
 #define S5P_PA_GPIO		S5PV210_PA_GPIO
@@ -254,6 +253,13 @@
 
 #define S3C_PA_OTGSFR           S5PV210_PA_OTGSFR
 #define S3C_SZ_OTGSFR           S5PV210_SZ_OTGSFR
+
+/* ACE (Advanced Crypto Engine) */
+#define S5PV210_PA_ACE		(0xEA000000)
+#define S5P_PA_ACE		S5PV210_PA_ACE
+
+#define S5PV210_SZ_ACE		SZ_32K
+#define S5P_SZ_ACE		S5PV210_SZ_ACE
 
 /* end usb */
 #endif /* __ASM_ARCH_MAP_H */

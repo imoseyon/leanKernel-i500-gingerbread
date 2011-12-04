@@ -31,7 +31,7 @@
 
 /*
  *  Mark for GetLog (tkhwang)
- */
+ */ 
 
 struct struct_plat_log_mark  {
 	u32 special_mark_1;
@@ -62,15 +62,15 @@ struct struct_marks_ver_mark {
 	u32 special_mark_4;
 	u32 log_mark_version;
 	u32 framebuffer_mark_version;
-	/* 2ê°<9c>ì<9d><98> ë©<94>ëª¨ë¦¬ë¥¼ êµ¬ë³<84>í<95><98>ê¸° ì<9c><84>í<95>´ì<84><9c> ì<82>¬ì<9a>©ë<90>©ë<8b><88>ë<8b>¤.*/
+	/* 2ê°ì ë©ëª¨ë¦¬ë¥¼ êµ¬ë³íê¸° ìí´ì ì¬ì©ë©ëë¤.*/
 	void * this;
-	/* first memory blockì<9d><98>  size */
+	/* first memory blockì  size */
 	u32 first_size;
-	/* first memory  blockì<9d><98> Physical address */
+	/* first memory  blockì Physical address */
 	u32 first_start_addr;
-	/* second memory blockì<9d><98>  size */
+	/* second memory blockì  size */
 	u32 second_size;
-	/* second memory  blockì<9d><98> Physical address */
+	/* second memory  blockì Physical address */
 	u32 second_start_addr;
 };
 
@@ -396,12 +396,6 @@ static ssize_t do_write_log_from_user(struct logger_log *log,
  * writev(), and aio_write(). Writes are our fast path, and we try to optimize
  * them above all else.
  */
-
-/* cpu currently holding logbuf_lock */
-#ifdef ADD_SYSTEM_TIMEINFO
-static volatile unsigned int logger_cpu = UINT_MAX;
-#endif
-
 ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 			 unsigned long nr_segs, loff_t ppos)
 {
@@ -411,14 +405,6 @@ ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	struct timespec now;
 	ssize_t ret = 0;
 
-#ifdef ADD_SYSTEM_TIMEINFO
-	char tbuf[50], *tp;
-	unsigned tlen;
-	unsigned long long t;
-	unsigned long nanosec_rem;
-#endif	
-
-
 	now = current_kernel_time();
 
 	header.pid = current->tgid;
@@ -426,19 +412,6 @@ ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	header.sec = now.tv_sec;
 	header.nsec = now.tv_nsec;
 	header.len = min_t(size_t, iocb->ki_left, LOGGER_ENTRY_MAX_PAYLOAD);
-
-#ifdef ADD_SYSTEM_TIMEINFO
-	/* Follow the token with the time */
-	memset(tbuf, 0, sizeof(tbuf));
-
-	t = cpu_clock(logger_cpu);
-	nanosec_rem = do_div(t, 1000000000);
-	tlen = sprintf(tbuf, "[%5lu.%06lu] ",
-			(unsigned long) t,
-			nanosec_rem / 1000);
-	header.system_sec = (unsigned long) t;
-	header.system_nsec = nanosec_rem / 1000;
-#endif
 
 	/* null writes succeed, return zero */
 	if (unlikely(!header.len))
@@ -656,17 +629,19 @@ static struct logger_log VAR = { \
 	.head = 0, \
 	.size = SIZE, \
 };
-/*
-DEFINE_LOGGER_DEVICE(log_main, LOGGER_LOG_MAIN, 64*1024)
-DEFINE_LOGGER_DEVICE(log_events, LOGGER_LOG_EVENTS, 256*1024)
-DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 64*1024)
-DEFINE_LOGGER_DEVICE(log_system, LOGGER_LOG_SYSTEM, 64*1024) */
 
 DEFINE_LOGGER_DEVICE(log_main, LOGGER_LOG_MAIN, 512*1024)
 DEFINE_LOGGER_DEVICE(log_events, LOGGER_LOG_EVENTS, 256*1024)
-DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 256*1024)
-DEFINE_LOGGER_DEVICE(log_system, LOGGER_LOG_SYSTEM, 256*1024)
 
+#if defined (CONFIG_MACH_STEALTHV)
+DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 1024*1024)
+#elif defined(CONFIG_MACH_AEGIS)
+DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 1024*1024)
+#else
+DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 256*1024)
+#endif
+
+DEFINE_LOGGER_DEVICE(log_system, LOGGER_LOG_SYSTEM, 256*1024)
 
 static struct logger_log *get_log_from_minor(int minor)
 {
@@ -688,12 +663,12 @@ static int __init init_log(struct logger_log *log)
 	ret = misc_register(&log->misc);
 	if (unlikely(ret)) {
 		printk(KERN_ERR "logger: failed to register misc "
-				"device for log '%s'!\n", log->misc.name);
+		       "device for log '%s'!\n", log->misc.name);
 		return ret;
 	}
 
 	printk(KERN_INFO "logger: created %luK log '%s'\n",
-			(unsigned long) log->size >> 10, log->misc.name);
+	       (unsigned long) log->size >> 10, log->misc.name);
 
 	return 0;
 }
@@ -701,6 +676,7 @@ static int __init init_log(struct logger_log *log)
 static int __init logger_init(void)
 {
 	int ret;
+
 	/*
 	 *  Mark for GetLog (tkhwang)
 	 */
@@ -708,8 +684,9 @@ static int __init logger_init(void)
 	plat_log_mark.p_radio  = _buf_log_radio;
 	plat_log_mark.p_events = _buf_log_events;
 	plat_log_mark.p_system = _buf_log_system;
-	marks_ver_mark.log_mark_version = 1;
 
+	marks_ver_mark.log_mark_version = 1; 
+	
 	ret = init_log(&log_main);
 	if (unlikely(ret))
 		goto out;

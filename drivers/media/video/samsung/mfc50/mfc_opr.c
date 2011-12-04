@@ -48,6 +48,9 @@
 #include "mfc_shared_mem.h"
 #include "mfc_intr.h"
 
+#ifdef CONFIG_DVFS_LIMIT
+#include <mach/cpu-freq-v210.h>
+#endif
 
 /* DEBUG_MAKE_RAW is option to dump input stream data of MFC.*/
 #define DEBUG_MAKE_RAW					0 /* Making Dec/Enc Debugging Files */
@@ -1008,6 +1011,13 @@ enum mfc_error_code mfc_init_encode(struct mfc_inst_ctx *mfc_ctx, union mfc_args
 	mfc_ctx->img_height = (unsigned int)enc_init_mpeg4_arg->in_height;
 	mfc_ctx->interlace_mode = enc_init_mpeg4_arg->in_interlace_mode;
 
+#ifdef CONFIG_DVFS_LIMIT
+	if (mfc_ctx->img_width * mfc_ctx->img_height == 1280 * 720)
+	{   
+		s5pv210_unlock_dvfs_high_level(DVFS_LOCK_TOKEN_1);
+		s5pv210_lock_dvfs_high_level(DVFS_LOCK_TOKEN_1, L1);
+	}
+#endif
 
 	/*
 	  * Set Available Type

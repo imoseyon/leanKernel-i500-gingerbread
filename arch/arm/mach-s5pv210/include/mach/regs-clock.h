@@ -635,7 +635,4 @@
 #define S5P_DAC_ENABLE			(1)
 #define S5P_DAC_DISABLE			(0)
 
-/* S5P_MIPI_PHY_CON0 */
-#define S5P_MIPI_M_RESETN               (1 << 1)
-
 #endif /* __ASM_ARCH_REGS_CLOCK_H */

@@ -69,9 +69,3 @@ obj-$(CONFIG_SAMSUNG_WAKEMASK)	+= wakeup-mask.o
 # PWM support
 
 obj-$(CONFIG_HAVE_PWM)		+= pwm.o
-
-ifeq ($(CONFIG_S5PV210_GARNETT_DELTA),y)
-#mipi_temp
-obj-y                           += dev-dsim.o
-obj-y                           += setup-dsim.o
-endif

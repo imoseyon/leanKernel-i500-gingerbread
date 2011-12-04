@@ -14,11 +14,9 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/spinlock.h>
-#if defined (CONFIG_MACH_FORTE)
-#include <mach/gpio-forte.h>
-#else
-#include <mach/gpio-atlas.h>	
-#endif
+
+#include <mach/gpio.h>
+
 #define READ_ROM_MAXIM  0x33
 #define SKIP_ROM        0xCC
 #define READ_MEMORY     0xF0
@@ -161,7 +159,7 @@ static int Readx(void)
 	port_out_low();
 	WAIT_X(1);
 	port_out_high();
-	WAIT_X(14);   // 15
+	WAIT_X(15);   
 	result = port_input() & 0x01;
 	WAIT_X(45);
 	spin_unlock_irqrestore(&intlock, flags);
@@ -321,12 +319,12 @@ int verizon_batt_auth_full_check(void)
 	int retval = 0;
 
 	/* Retry 3 times */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < 3; i++) {
 
 		msleep(100);
 
 		if (Reset_TA())
-			retval = 0;
+			return 0;
 
 		if (rom_code_protection() == 0)
 			retval = 0;

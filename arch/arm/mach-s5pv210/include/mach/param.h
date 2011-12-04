@@ -6,20 +6,11 @@
 #ifndef ASM_MACH_PARAM_H
 #define ASM_MACH_PARAM_H
 
-
-#if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_FORTE)
-#define _SUPPORT_SAMSUNG_AUTOINSTALLER_
-#endif
-
-
 #define PARAM_MAGIC			0x72726624
 #define PARAM_VERSION		0x13	/* Rev 1.3 */
 #define PARAM_STRING_SIZE	1024	/* 1024 Characters */
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-#define MAX_PARAM			21
-#else
+
 #define MAX_PARAM			20
-#endif
 #define MAX_STRING_PARAM	5
 
 /* Default Parameter Values */
@@ -57,9 +48,6 @@ typedef enum {
 	__SET_DEFAULT_PARAM,
 	__PARAM_INT_13,	/* Reserved. */
 	__PARAM_INT_14,	/* Reserved. */
-#if defined CONFIG_S5PV210_GARNETT_DELTA
-        __GRIP_DUTY,
-#endif
 	__VERSION,
 	__CMDLINE,
 	__PARAM_STR_2,
@@ -97,13 +85,17 @@ extern void (*sec_get_param_value)(int idx, void *value);
 
 #define USB_SEL_MASK	(1 << 0)
 #define UART_SEL_MASK	(1 << 1)
-#define USB_SAMSUNG_KIES_MASK                   (1 << 2)
-#define USB_UMS_MASK                            (1 << 3)
-#define USB_MTP_MASK                            (1 << 4)
-#define USB_VTP_MASK                            (1 << 5)
-#define USB_ASKON_MASK                          (1 << 6)
-#define USB_SAMSUNG_KIES_REAL_MASK              (1 << 10)
 
+#define USB_PATH_MASK	(3 << 0)
+#define USB_PATH_MODEM	(0 << 0)
+#define USB_PATH_PDA	(1 << 0)
+#define USB_PATH_LTE	(2 << 0)
 
+#define UART_PATH_MASK	(3 << 2)
+#define UART_PATH_MODEM	(0 << 2)
+#define UART_PATH_PDA	(1 << 2)
+#define UART_PATH_LTE	(2 << 2)
+
+#define UART_DEBUG_MASK	(1 << 23)
 
 #endif	/* ASM_MACH_PARAM_H */

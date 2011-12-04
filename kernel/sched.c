@@ -85,7 +85,6 @@
 #ifdef CONFIG_KERNEL_DEBUG_SEC
 #include <linux/kernel_sec_common.h>
 #endif
-
 /*
  * Convert user-nice values [ -20 ... 0 ... 19 ]
  * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],
@@ -3638,9 +3637,9 @@ need_resched_nonpreemptible:
 		cpu = smp_processor_id();
 		rq = cpu_rq(cpu);
 #ifdef CONFIG_KERNEL_DEBUG_SEC
-		gExcpTaskLog[gExcpTaskLogIdx].time = cpu_clock(cpu);
-		strcpy(gExcpTaskLog[gExcpTaskLogIdx].log.task,rq->curr->comm);
-		gExcpTaskLogIdx = (++gExcpTaskLogIdx >= SCHED_LOG_MAX)? 0 : gExcpTaskLogIdx;
+        gExcpTaskLog[gExcpTaskLogIdx].time = cpu_clock(cpu);
+        strcpy(gExcpTaskLog[gExcpTaskLogIdx].log.task,rq->curr->comm);
+        gExcpTaskLogIdx = (++gExcpTaskLogIdx >= SCHED_LOG_MAX)? 0 : gExcpTaskLogIdx;
 #endif
 	} else
 		raw_spin_unlock_irq(&rq->lock);
@@ -7506,7 +7505,7 @@ void __init sched_init(void)
 {
 	int i, j;
 	unsigned long alloc_size = 0, ptr;
-	
+
 	/*
 	 *  Add GAForensic init for preventing symbol removal for optimization. (tkhwang)
 	 */
@@ -7516,18 +7515,18 @@ void __init sched_init(void)
 		GAFINFO.cfs_rq_struct_rq_struct=offsetof(struct cfs_rq, rq);
 	#else
 		GAFINFO.cfs_rq_struct_rq_struct=0x1224;
-	#endif
+	#endif 
 
-	unsigned short *checksum        =       &(GAFINFO.GAFINFOCheckSum);
-	unsigned char  *memory          =       &GAFINFO;
-	unsigned char   address;
+	unsigned short *checksum	=	&(GAFINFO.GAFINFOCheckSum);
+	unsigned char  *memory		=	&GAFINFO;
+	unsigned char	address;
 	for (*checksum = 0, address = 0; address < (sizeof(GAFINFO) - sizeof(GAFINFO.GAFINFOCheckSum)); address++) {
 		if ((*checksum) & 0x8000)
 			(*checksum) = (((*checksum) << 1) | 1 ) ^ memory[address];
 		else
 			(*checksum) = ((*checksum) << 1) ^ memory[address];
 	}
-
+	
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	alloc_size += 2 * nr_cpu_ids * sizeof(void **);
 #endif

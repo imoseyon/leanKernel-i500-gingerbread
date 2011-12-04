@@ -19,8 +19,8 @@
 
 enum {
 	SEC_JACK_NO_DEVICE		= 0x0,
-	SEC_HEADSET_4_POLE_DEVICE	= 0x01 << 0,
-	SEC_HEADSET_3_POLE_DEVICE	= 0x01 << 1,
+	SEC_HEADSET_4POLE		= 0x01 << 0,
+	SEC_HEADSET_3POLE		= 0x01 << 1,
 	SEC_TTY_DEVICE			= 0x01 << 2,
 	SEC_FM_HEADSET			= 0x01 << 3,
 	SEC_FM_SPEAKER			= 0x01 << 4,
@@ -37,20 +37,23 @@ struct sec_jack_zone {
 	unsigned int jack_type;
 };
 
+struct sec_jack_buttons_zone {
+	unsigned int code;
+	unsigned int adc_low;
+	unsigned int adc_high;
+};
+
 struct sec_jack_platform_data {
 	void	(*set_micbias_state) (bool);
-	void 	(*set_popup_sw_state) (bool);
 	int	(*get_adc_value) (void);
 	struct sec_jack_zone	*zones;
+	struct sec_jack_buttons_zone	*buttons_zones;
 	int	num_zones;
+	int	num_buttons_zones;
 	int	det_gpio;
-	int	short_send_end_gpio;
-        int     open_send_end_gpio;
+	int	send_end_gpio;
 	bool	det_active_high;
-	bool    det_active_low;
-	bool	send_end_active_high; 
-	int 	open_send_end_eintr;
-	int 	short_send_end_eintr; 
+	bool	send_end_active_high;
 };
 #endif
 

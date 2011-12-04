@@ -137,7 +137,6 @@ static void alarm_enqueue_locked(struct alarm *alarm)
 			leftmost = 0;
 		}
 	}
-
 	if (leftmost)
 		base->first = &alarm->node;
 	if (leftmost || was_first)

@@ -96,13 +96,13 @@ static int __devinit i2c_gpio_probe(struct platform_device *pdev)
 	bit_data = kzalloc(sizeof(struct i2c_algo_bit_data), GFP_KERNEL);
 	if (!bit_data)
 		goto err_alloc_bit_data;
-	
+
 	ret = gpio_request(pdata->sda_pin, "sda");
-        if (ret)
-                goto err_request_sda;
-        ret = gpio_request(pdata->scl_pin, "scl");
-        if (ret)
-                goto err_request_scl;
+	if (ret)
+		goto err_request_sda;
+	ret = gpio_request(pdata->scl_pin, "scl");
+	if (ret)
+		goto err_request_scl;
 
 	if (pdata->sda_is_open_drain) {
 		gpio_direction_output(pdata->sda_pin, 1);

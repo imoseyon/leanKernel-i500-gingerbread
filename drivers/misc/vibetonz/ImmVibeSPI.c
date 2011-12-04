@@ -30,7 +30,9 @@
 #include <plat/gpio-cfg.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
+#include <mach/gpio.h>
 #include "tspdrv.h"
+
 
 #ifdef IMMVIBESPIAPI
 #undef IMMVIBESPIAPI
@@ -45,54 +47,41 @@
 #define PWM_DUTY_MAX    579 /* 13MHz / (579 + 1) = 22.4kHz */
 
 #define FREQ_COUNT		87084/2	/*89284*/
-#if 0
-#if defined CONFIG_S5PV210_VICTORY
-#define PWM_DEVICE	2
-#elif defined CONFIG_S5PV210_ATLAS
-#define PWM_DEVICE	1
-#endif
-#endif 
 
 #define PWM_DEVICE	1
+
+#define GPD0_TOUT_1		2 << 4
+
 struct pwm_device	*Immvib_pwm;
 
 static bool g_bAmpEnabled = false;
 
 long int freq_count = FREQ_COUNT;
-extern struct vibrator_platform_data vib_plat_data;
+
+#if defined(CONFIG_MACH_VIPER) || defined(CONFIG_MACH_CHIEF)
+extern void motor_control(bool onOff);
+#endif
+
 /*
 ** Called to disable amp (disable output force)
 */
 IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpDisable(VibeUInt8 nActuatorIndex)
 {
-#if 0
-#error Please review the code between the #if and #endif
-
-    if (g_bAmpEnabled)
-    {
-        DbgOut((KERN_DEBUG "ImmVibeSPI_ForceOut_AmpDisable.\n"));
-
-        g_bAmpEnabled = false;
-
-#if 0
-        mhn_gpio_set_level(GPIO_EN, GPIO_LEVEL_LOW);
-	    mz_ops.bstat &= ~HN_BATTERY_MOTOR;
-#endif
-    }
-#endif
-    if (g_bAmpEnabled)
-    {
+	if (g_bAmpEnabled)
+	{
 		g_bAmpEnabled = false;
-		
+#if defined(CONFIG_MACH_VIPER) || defined(CONFIG_MACH_CHIEF)
+		motor_control(0);
+#else 
 		pwm_config(Immvib_pwm, 0, freq_count/2);
 		pwm_disable(Immvib_pwm);
-		
+
 		//gpio_request(GPIO_VIBTONE_EN1, "GPIO_VIBTONE_EN1");
-		gpio_direction_output(vib_plat_data.vib_enable_gpio,0);
-		gpio_direction_input(vib_plat_data.vib_enable_gpio);
-		s3c_gpio_setpull(vib_plat_data.vib_enable_gpio,S3C_GPIO_PULL_DOWN);
+		gpio_direction_output(GPIO_VIBTONE_EN1, GPIO_LEVEL_LOW);
+		gpio_direction_output(GPIO_VIBTONE_PWM, GPIO_LEVEL_LOW);
 		//gpio_free(GPIO_VIBTONE_EN1);
-    }
+#endif		
+	}
 
 	return VIBE_S_SUCCESS;
 }
@@ -102,47 +91,24 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpDisable(VibeUInt8 nActuatorIndex
 */
 IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpEnable(VibeUInt8 nActuatorIndex)
 {
-#if 0
-#error Please review the code between the #if and #endif
-
-    if (!g_bAmpEnabled)
-    {
-        DbgOut((KERN_DEBUG "ImmVibeSPI_ForceOut_AmpEnable.\n"));
-
-        g_bAmpEnabled = true;
-
-#if 0
-        /* 
-        ** Ensure the PWM frequency is at the expected value. These 2 lines of code
-        ** can be removed if no other application alters the PWM frequency.
-        */
-        PWM_CTRL  = 0;                  /* 13Mhz / (0 + 1) = 13MHz */
-        PWM_PERIOD = PWM_DUTY_MAX;      /* 13Mhz / (PWM_DUTY_MAX + 1) = 22.4kHz */
-
-        /* Set duty cycle to 50% */
-        PWM_DUTY = (PWM_DUTY_MAX+1)>>1; /* Duty cycle range = [0, PWM_DUTY_MAX] */
-
-        /* Enable amp */
-        mhn_gpio_set_level(GPIO_EN, GPIO_LEVEL_HIGH);
-        mz_ops.bstat |= HN_BATTERY_MOTOR;
-#endif
-    }
-#endif
-
-    if (!g_bAmpEnabled)
-    {
-    		g_bAmpEnabled = true;
-
+	if (!g_bAmpEnabled)
+	{
+		g_bAmpEnabled = true;
+#if defined(CONFIG_MACH_VIPER) || defined(CONFIG_MACH_CHIEF)
+		motor_control(1);
+#else
 		pwm_enable(Immvib_pwm);
-		
-		//gpio_request(GPIO_VIBTONE_EN1, "GPIO_VIBTONE_EN1");
-		gpio_direction_output(vib_plat_data.vib_enable_gpio, 0);
-		mdelay(1);
-		gpio_set_value(vib_plat_data.vib_enable_gpio,1);
-		//gpio_free(GPIO_VIBTONE_EN1);
-    }
 
-    return VIBE_S_SUCCESS;
+		//gpio_request(GPIO_VIBTONE_EN1, "GPIO_VIBTONE_EN1");
+		gpio_direction_output(GPIO_VIBTONE_EN1, GPIO_LEVEL_LOW);
+		s3c_gpio_cfgpin(GPIO_VIBTONE_PWM, GPD0_TOUT_1);
+		mdelay(1);
+		gpio_set_value(GPIO_VIBTONE_EN1, GPIO_LEVEL_HIGH);
+		//gpio_free(GPIO_VIBTONE_EN1);
+#endif
+	}
+
+return VIBE_S_SUCCESS;
 }
 
 /*
@@ -150,40 +116,9 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpEnable(VibeUInt8 nActuatorIndex)
 */
 IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Initialize(void)
 {
-#if 0
-#error Please review the code between the #if and #endif
-
-    DbgOut((KERN_DEBUG "ImmVibeSPI_ForceOut_Initialize.\n"));
-
-    g_bAmpEnabled = true;   /* to force ImmVibeSPI_ForceOut_AmpDisable disabling the amp */
-
-    /* 
-    ** Disable amp.
-    ** If multiple actuators are supported, please make sure to call ImmVibeSPI_ForceOut_AmpDisable
-    ** for each actuator (provide the actuator index as input argument).
-    */
-    ImmVibeSPI_ForceOut_AmpDisable(0);
-
-#if 0
-    /* 
-    ** PWM frequency:
-    ** The PWM frequency must be set to a fixed value and shouldn't change
-    ** during the lifetime of the app. The ideal solution would be to use a
-    ** frequency value between 20kHz and 50kHz. A frequency value slightly
-    ** outside of the above limits should still work and be compliant with
-    ** TSP requirements (please refer to the TSP integration guide for
-    ** further information).
-    */
-
-    /* 22.4kHz PWM, duty cycle 50% */
-    PWM_CTRL = 0;                   /* 13Mhz / (0 + 1) = 13MHz */
-    PWM_PERIOD = PWM_DUTY_MAX;      /* 13Mhz / (PWM_DUTY_MAX + 1) = 22.4kHz */
-    PWM_DUTY = (PWM_DUTY_MAX+1)>>1; /* Duty cycle range = [0, PWM_DUTY_MAX] */
-#endif
-#endif
 	g_bAmpEnabled = true; 
 
-	Immvib_pwm = pwm_request(vib_plat_data.timer_id, "Immvibtonz");
+	Immvib_pwm = pwm_request(PWM_DEVICE, "Immvibtonz");
 	pwm_config(Immvib_pwm, freq_count/2, freq_count);
 	ImmVibeSPI_ForceOut_AmpDisable(0);
 

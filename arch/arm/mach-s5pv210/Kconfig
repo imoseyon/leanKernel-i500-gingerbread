@@ -53,21 +53,6 @@ config S5PV210_POWER_DOMAIN
 	default y
 	help
 	  Enable S5PV210 power domain support.
-choice
-        prompt "Select ARIES RAM SIZE "
-config DDR_RAM_3G
-        bool "Select DDR RAM 3G"
-        depends on ARCH_S5PV210
-        help
-                Select to support 3G bit RAM
-
-config DDR_RAM_2G
-        bool "select DDR RAM 2G"
-        depends on ARCH_S5PV210
-        help
-        	Select to support 2G bit RAM
-
-endchoice
 
 # machine support
 
@@ -170,8 +155,26 @@ config MACH_ARIES
 	help
 	  Machine support for Aries
 
-config MACH_CRESPO
-	bool "Crespo"
+config ARIES_EUR
+	bool "select S1 Europe"
+	depends on MACH_ARIES
+	help
+	Select S1 Europe
+
+config ARIES_NTT
+	bool "select S1 NTT"
+	depends on MACH_ARIES
+	help
+	Select S1 NTT
+
+config ARIES_LATONA
+	bool "select S1 LATONA"
+	depends on MACH_ARIES
+	help
+	Select S1 LATONA
+
+config MACH_STEALTHV
+	bool "StealthV"
 	select CPU_S5PV210
 	select ARCH_DISCONTIGMEM_ENABLE
 	select S3C_DEV_WDT
@@ -186,10 +189,16 @@ config MACH_CRESPO
 	select S5PV210_SETUP_SDHCI
 	select S5PV210_POWER_DOMAIN
 	help
-	  Machine support for Crespo
+	  Machine support for Stealthv 
 
-config MACH_ATLAS
-	bool "Atlas"
+config STEALTHV_USA
+	bool "select Stealthv"
+	depends on MACH_STEALTHV
+	help
+	Select StealthV 
+
+config MACH_AEGIS
+	bool "Aegis"
 	select CPU_S5PV210
 	select ARCH_DISCONTIGMEM_ENABLE
 	select S3C_DEV_WDT
@@ -204,10 +213,47 @@ config MACH_ATLAS
 	select S5PV210_SETUP_SDHCI
 	select S5PV210_POWER_DOMAIN
 	help
-	  Machine support for Atlas.
+	  Machine support for Aegis 
 
-config MACH_FORTE
-        bool "FORTE"
+config AEGIS_USA
+	bool "select Aegis"
+	depends on MACH_Aegis
+	help
+	Select Aegis 
+
+config MACH_VIPER
+        bool "Viper"
+        select CPU_S5PV210
+        select ARCH_DISCONTIGMEM_ENABLE
+        select S3C_DEV_WDT
+        select HAVE_S3C2410_WATCHDOG
+        select S3C_DEV_I2C1
+        select S3C_DEV_I2C2
+        select HAVE_PWM
+        select ARCH_HAS_CPUFREQ
+        select S3C_DEV_HSMMC
+        select S3C_DEV_HSMMC1 if !S5PV210_SD_CH0_8BIT
+        select S3C_DEV_HSMMC2
+        select S3C_DEV_HSMMC3
+        select S5PV210_SETUP_SDHCI
+        select S5PV210_POWER_DOMAIN
+        help
+          Machine support for Viper
+ 
+config VIPER_USA
+        bool "select Viper"
+        depends on MACH_Viper
+        help
+        Select Viper
+
+config TIKAL_USCC
+        bool "select Tikal_uscc"
+        depends on MACH_STEALTHV
+        help
+        Select Tikal_uscc
+ 
+config MACH_CHIEF
+        bool "Chief"
         select CPU_S5PV210
         select ARCH_DISCONTIGMEM_ENABLE
         select S3C_DEV_WDT
@@ -222,52 +268,8 @@ config MACH_FORTE
         select S5PV210_SETUP_SDHCI
         select S5PV210_POWER_DOMAIN
         help
-          Machine support for Forte.
+          Machine support for Chief
 
-config MACH_VICTORY
-	bool "Victory"
-	select CPU_S5PV210
-	select ARCH_DISCONTIGMEM_ENABLE
-	select S3C_DEV_WDT
-	select HAVE_S3C2410_WATCHDOG
-	select S3C_DEV_I2C1
-	select S3C_DEV_I2C2
-	select HAVE_PWM
-	select ARCH_HAS_CPUFREQ
-	select S3C_DEV_HSMMC
-	select S3C_DEV_HSMMC1 if !S5PV210_SD_CH0_8BIT
-	select S3C_DEV_HSMMC2
-	select S5PV210_SETUP_SDHCI
-	select S5PV210_POWER_DOMAIN
-	help
-	  Machine support for Victory
-
-config S5PV210_GARNETT_DELTA
-        depends on MACH_ATLAS
-        bool "select Garnett Delta"
-        help
-                Enables to include the Garnett product delta
-
-config MACH_ATLAS_USCC
-        depends on MACH_ATLAS
-        bool "select USCC Feature"
-        default n
-        help
-                Enables to include the USCC Carrier Feature               
-
-config MACH_ATLAS_CS
-        depends on MACH_ATLAS
-        bool "select CS Cellular South Feature"
-        default n
-        help
-                Enables to include the CS Carrier Feature
-
-config MACH_ATLAS_ACG
-        depends on MACH_ATLAS
-        bool "select ACG  Feature"
-        default n
-        help
-                Enables to include the ACG Carrier Feature
 
 config S5PV210_SETUP_FB
 	bool

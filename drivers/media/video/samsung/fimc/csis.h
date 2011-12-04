@@ -37,6 +37,7 @@ struct s3c_csis_info {
 	void __iomem	*regs;
 	int		irq;
 	int		nr_lanes;
+	unsigned int initialized;
 };
 
 #endif /* __CSIS_H */

@@ -19,7 +19,7 @@
 #ifndef _CYPRESS_TOUCHKEY_H__
 #define _CYPRESS_TOUCHKEY_H__
 
-#define CYPRESS_TOUCHKEY_DEV_NAME "cypress_touchkey"
+#define CYPRESS_TOUCHKEY_DEV_NAME "melfas_touchkey"
 
 struct touchkey_platform_data {
 	int keycode_cnt;

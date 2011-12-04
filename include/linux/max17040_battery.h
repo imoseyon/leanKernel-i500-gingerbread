@@ -18,6 +18,8 @@ struct max17040_platform_data {
 		struct power_supply *psy);
 	void (*power_supply_unregister)(struct power_supply *psy);
 	u16 rcomp_value;
+	int psoc_full;
+	int psoc_empty;
 };
 
 #endif

@@ -540,10 +540,14 @@ static void s5p_rp_effect_trigger(void)
 
 static void s5p_rp_set_gain_apply(void)
 {
-	writel((((s5p_rp.gain * s5p_rp.gain_subl) / 100)& 0xFFFF00) >> 8,
-			s5p_rp.commbox + RP_GAIN_FACTOR);
-	writel((((s5p_rp.gain * s5p_rp.gain_subr) / 100) & 0xFFFF00) << 8,
-			s5p_rp.commbox + RP_GAIN_FACTOR);
+	unsigned long gain;
+
+	gain = (((s5p_rp.gain * s5p_rp.gain_subl) / 100) & 0x01FFFC00) >> 10;
+	gain |= (((s5p_rp.gain * s5p_rp.gain_subr) / 100) & 0x01FFFC00) << 6;
+
+	s5pdbg("========== SRP GAIN register [%08lX] ============\n", gain);
+
+	writel(gain, s5p_rp.commbox + RP_GAIN_FACTOR);
 }
 
 #if 1	/* Test only */

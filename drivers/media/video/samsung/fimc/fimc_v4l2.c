@@ -16,11 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/videodev2.h>
-#ifdef CONFIG_MACH_FORTE
-#include <linux/videodev2_samsung_forte.h>
-#else
 #include <linux/videodev2_samsung.h>
-#endif // CONFIG_MACH_FORTE
 #include <media/v4l2-ioctl.h>
 #include <plat/fimc.h>
 #include <linux/clk.h>
@@ -34,8 +30,7 @@ static int fimc_querycap(struct file *filp, void *fh,
 
 	fimc_info1("%s: called\n", __func__);
 
-	//strcpy(cap->driver, "Samsung FIMC Driver");
-	strlcpy(cap->driver,"Samsung FIMC Driver", sizeof(cap->driver));
+	strcpy(cap->driver, "Samsung FIMC Driver");
 	strlcpy(cap->card, ctrl->vd->name, sizeof(cap->card));
 	sprintf(cap->bus_info, "FIMC AHB-bus");
 
@@ -86,14 +81,7 @@ static int fimc_querybuf(struct file *filp, void *fh, struct v4l2_buffer *b)
 static int fimc_g_ctrl(struct file *filp, void *fh, struct v4l2_control *c)
 {
 	struct fimc_control *ctrl = ((struct fimc_prv_data *)fh)->ctrl;
-	struct s3c_platform_fimc *pdata	= to_fimc_plat(ctrl->dev);
 	int ret = -1;
-
-	/* can get hw version at any time */
-	if (c->id == V4L2_CID_FIMC_VERSION) {
-		c->value = pdata->hw_ver;
-		return 0;
-	}
 
 	if (ctrl->cap != NULL) {
 		ret = fimc_g_ctrl_capture(fh, c);

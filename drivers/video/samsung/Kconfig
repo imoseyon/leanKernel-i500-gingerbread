@@ -13,6 +13,9 @@ config FB_S3C
 	---help---
 	  This enables support for Samsung Display Controller (FIMD)
 
+config  FB_S3C_CHIEF
+        bool "Select lcd for chief"
+        depends on FB_S3C
 config FB_S3C_SPLASH_SCREEN
         bool "SPLASH_SCREEN on LCD"
         depends on FB_S3C
@@ -72,6 +75,16 @@ choice
 depends on FB_S3C
 prompt "Select LCD Type"
 default FB_S3C_LTE480WV
+default FB_S3C_S6D16A0X
+config FB_S3C_S6D16A0X
+	bool "S6D16A0X"
+	depends on FB_S3C
+	select SPI
+	select SPI_GPIO
+	select SPI_BITBANG
+	help
+	This enables support for Samsung S6D16A0X HVGA TFT LCD panel
+
 config FB_S3C_LTE480WV
 	bool "LTE480WV"
 	depends on (MACH_SMDKV210 || MACH_SMDKC110)
@@ -94,23 +107,23 @@ config FB_S3C_TL2796
         ---help---
           This enables support for Samsung TL2796 WVGA LCD panel
 
-config FB_S3C_S6D16A0X
-        bool "S6D16A0X"
+config FB_S3C_S6D05A1X12
+        bool "S6D05A1X12"
         depends on FB_S3C
         select SPI
         select SPI_GPIO
         select SPI_BITBANG
         ---help---
-          This enables support for Samsung S6D16A0X WVGA LCD panel
+          This enables support for Samsung S6D05A1X12 HVGA LCD panel
 
-config FB_S3C_NT35580
-        bool "NT35580"
+config FB_S3C_LD9040
+        bool "LD9040"
         depends on FB_S3C
         select SPI
         select SPI_GPIO
         select SPI_BITBANG
         ---help---
-          This enables support for SONY NT35580 WVGA LCD panel
+          This enables support for Samsung LD9040 WVGA LCD panel
 
 config FB_S3C_LVDS
 	bool "LVDS"
@@ -137,11 +150,11 @@ config FB_S3C_MDNIE
 	  This enables support for Samsung MDNIE feature
 
 config FB_S3C_TL2796_ACL
-        bool "Samsung TL2796(ACL)"
-        depends on FB_S3C_TL2796
-        default y
-        ---help---
-          This enables support for Samsung TL2796 WVGA LCD panel to enable ACL feature.
+	bool "Samsung TL2796(ACL)"
+	depends on FB_S3C_TL2796
+	default y
+	---help---
+	  This enables support for Samsung TL2796 WVGA LCD panel to enable ACL feature.
 
 config FB_S3C_CMC623
 	bool "Samsung CMC623"

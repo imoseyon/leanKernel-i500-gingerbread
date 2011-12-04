@@ -162,21 +162,22 @@ __do_user_fault(struct task_struct *tsk, unsigned long addr,
 #ifdef CONFIG_DEBUG_USER
 	if (user_debug & UDBG_SEGV) {
 		printk(KERN_DEBUG "%s: unhandled page fault (%d) at 0x%08lx, code 0x%03x\n",
-				tsk->comm, sig, addr, fsr);
+		       tsk->comm, sig, addr, fsr);
 		show_pte(tsk->mm, addr);
 		show_regs(regs);
 	}
 #endif
+
 	/*
 	 *  When in debug level HIGH, add more debugging stuff.
 	 */
-
+	 
 	if (kernel_sec_check_debug_level_high() == 1) {
 		printk(KERN_DEBUG "%s: unhandled page fault (%d) at 0x%08lx, code 0x%03x\n",
-				tsk->comm, sig, addr, fsr);
+		       tsk->comm, sig, addr, fsr);
 		show_pte(tsk->mm, addr);
-		show_regs(regs);
-//		panic("User Fault\n");
+		show_regs(regs);		
+		panic("User Fault\n");
 	}
 
 	tsk->thread.address = addr;

@@ -37,10 +37,9 @@ obj-$(CONFIG_CHARGER_PCF50633)	+= pcf50633-charger.o
 
 
 obj-$(CONFIG_BATTERY_S5PC110)	+= s5pc110_battery.o
-ifeq ($(CONFIG_MACH_ATLAS),y)
-obj-$(CONFIG_BATTERY_S5PC110)	+= maxim_dallas.o
-endif
-ifeq ($(CONFIG_MACH_FORTE),y)
-obj-$(CONFIG_BATTERY_S5PC110)   += maxim_dallas.o
-endif
 obj-$(CONFIG_BATTERY_S3C)	+= s3c_fake_battery.o
+
+obj-$(CONFIG_BATTERY_VZW_AUTH)	+= maxim_dallas.o
+obj-$(CONFIG_CHARGER_FAN5403)	+= fan5403_charger.o
+obj-$(CONFIG_CHARGER_SMB328A)	+= smb328a_charger.o
+

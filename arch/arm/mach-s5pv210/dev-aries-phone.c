@@ -18,7 +18,6 @@
 
 #include <mach/map.h>
 #include <mach/gpio.h>
-#include <mach/gpio-aries.h>
 
 #include "../../../drivers/misc/samsung_modemctl/modem_ctl.h"
 

@@ -54,6 +54,7 @@
 
 
 #define ADC_BUFFER_NUM	6
+#define LIGHT_BUFFER_NUM	5 //10
 
 /* ADDSEL is LOW */
 #define REGS_PROX		0x0 /* Read  Only */
@@ -67,16 +68,6 @@
 #define PROXIMITY	1
 #define ALL		2
 
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-static const int adc_table[4] = {
-	340,
-	976,
-	1521,
-	2083,
-};
-#define LIGHT_BUFFER_NUM	10
-#endif
-
 static u8 reg_defaults[5] = {
 	0x00, /* PROX: read only register */
 	0x08, /* GAIN: large LED drive level */
@@ -84,6 +75,29 @@ static u8 reg_defaults[5] = {
 	0x04, /* CYCLE: */
 	0x01, /* OPMOD: normal operating mode */
 };
+
+#ifdef CONFIG_MACH_AEGIS
+static const int adc_table[4] = {
+	340,
+	976,
+	1521,
+	2083,
+};
+#elif CONFIG_MACH_STEALTHV
+static const int adc_table[4] = {
+	500,
+	1800,
+	2100,
+	3000,
+};
+#else
+static const int adc_table[4] = {
+	15,
+	150,
+	1500,
+	15000,
+};
+#endif
 
 struct gp2a_data;
 
@@ -113,10 +127,8 @@ struct gp2a_data {
 	struct wake_lock prx_wake_lock;
 	struct workqueue_struct *wq;
 	char val_state;
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
 	int light_count;
 	int light_buffer;
-#endif
 };
 
 int gp2a_i2c_write(struct gp2a_data *gp2a, u8 reg, u8 *val)
@@ -151,10 +163,8 @@ static void gp2a_light_enable(struct gp2a_data *gp2a)
 {
 	gp2a_dbgmsg("starting poll timer, delay %lldns\n",
 		    ktime_to_ns(gp2a->light_poll_delay));
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
 	gp2a->light_count = 0;
 	gp2a->light_buffer = 0;
-#endif
 	hrtimer_start(&gp2a->timer, gp2a->light_poll_delay, HRTIMER_MODE_REL);
 }
 
@@ -273,12 +283,12 @@ static ssize_t proximity_enable_store(struct device *dev,
 		if (!gp2a->power_state)
 			gp2a->pdata->power(true);
 		gp2a->power_state |= PROXIMITY_ENABLED;
-		enable_irq(gp2a->irq);
-		enable_irq_wake(gp2a->irq);
 		gp2a_i2c_write(gp2a, REGS_GAIN, &reg_defaults[1]);
 		gp2a_i2c_write(gp2a, REGS_HYS, &reg_defaults[2]);
 		gp2a_i2c_write(gp2a, REGS_CYCLE, &reg_defaults[3]);
 		gp2a_i2c_write(gp2a, REGS_OPMOD, &reg_defaults[4]);
+		enable_irq(gp2a->irq);
+		enable_irq_wake(gp2a->irq);
 	} else if (!new_value && (gp2a->power_state & PROXIMITY_ENABLED)) {
 		disable_irq_wake(gp2a->irq);
 		disable_irq(gp2a->irq);
@@ -367,11 +377,11 @@ static int lightsensor_get_adcvalue(struct gp2a_data *gp2a)
 
 static void gp2a_work_func_light(struct work_struct *work)
 {
+	int i;
 	struct gp2a_data *gp2a = container_of(work, struct gp2a_data,
 					      work_light);
-	int adc = lightsensor_get_adcvalue(gp2a);	
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-	int i;
+	int adc = lightsensor_get_adcvalue(gp2a);
+
 	for (i = 0; ARRAY_SIZE(adc_table); i++)
 		if (adc <= adc_table[i])
 			break;
@@ -380,15 +390,12 @@ static void gp2a_work_func_light(struct work_struct *work)
 		if (gp2a->light_count++ == LIGHT_BUFFER_NUM) {
 			input_report_abs(gp2a->light_input_dev, ABS_MISC, adc);
 			input_sync(gp2a->light_input_dev);
+			gp2a->light_count = 0;
 		}
 	} else {
 		gp2a->light_buffer = i;
 		gp2a->light_count = 0;
 	}
-#else
-	input_report_abs(gp2a->light_input_dev, ABS_MISC, adc);
-	input_sync(gp2a->light_input_dev);
-#endif
 }
 
 /* This function is for light sensor.  It operates every a few seconds.
@@ -423,7 +430,7 @@ irqreturn_t gp2a_irq_handler(int irq, void *data)
 	}
 
 	ip->val_state = val;
-	printk("gp2a: proximity val = %d\n", val);
+	pr_err("gp2a: proximity val = %d\n", val);
 
 	/* 0 is close, 1 is far */
 	input_report_abs(ip->proximity_input_dev, ABS_DISTANCE, val);
@@ -447,15 +454,15 @@ static int gp2a_setup_irq(struct gp2a_data *gp2a)
 			__func__, pdata->p_out, rc);
 		return rc;
 	}
-/*
+
 	rc = gpio_direction_input(pdata->p_out);
 	if (rc < 0) {
 		pr_err("%s: failed to set gpio %d as input (%d)\n",
 			__func__, pdata->p_out, rc);
 		goto err_gpio_direction_input;
 	}
-*/
-	irq = pdata->p_irq;
+
+	irq = gpio_to_irq(pdata->p_out);
 	rc = request_threaded_irq(irq, NULL,
 			 gp2a_irq_handler,
 			 IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
@@ -643,6 +650,7 @@ static int gp2a_i2c_probe(struct i2c_client *client,
 	/* set initial proximity value as 1 */
 	input_report_abs(gp2a->proximity_input_dev, ABS_DISTANCE, 1);
 	input_sync(gp2a->proximity_input_dev);
+
 	goto done;
 
 	/* error, unwind it all */

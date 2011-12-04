@@ -20,10 +20,6 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-#ifndef CONFIG_MACH_VICTORY
-#define ADD_SYSTEM_TIMEINFO
-#endif
-
 struct logger_entry {
 	__u16		len;	/* length of the payload */
 	__u16		__pad;	/* no matter what, we get 2 bytes of padding */
@@ -31,10 +27,6 @@ struct logger_entry {
 	__s32		tid;	/* generating process's tid */
 	__s32		sec;	/* seconds since Epoch */
 	__s32		nsec;	/* nanoseconds */
-#ifdef ADD_SYSTEM_TIMEINFO
-	__u32		system_sec;		/* kernel seconds */
-	__u32		system_nsec;	/* kernel nanoseconds */
-#endif
 	char		msg[0];	/* the entry's payload */
 };
 
@@ -43,12 +35,7 @@ struct logger_entry {
 #define LOGGER_LOG_SYSTEM	"log_system"	/* system/framework messages */
 #define LOGGER_LOG_MAIN		"log_main"	/* everything else */
 
-#ifdef ADD_SYSTEM_TIMEINFO	
-#define LOGGER_ENTRY_MAX_LEN		(4*1024 + 8)  // 8 : added byte "system_sec" and "system_nsec"
-#else
 #define LOGGER_ENTRY_MAX_LEN		(4*1024)
-#endif
-
 #define LOGGER_ENTRY_MAX_PAYLOAD	\
 	(LOGGER_ENTRY_MAX_LEN - sizeof(struct logger_entry))
 

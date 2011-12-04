@@ -91,3 +91,5 @@ obj-$(CONFIG_CRYPTO_GHASH) += ghash-generic.o
 #
 obj-$(CONFIG_XOR_BLOCKS) += xor.o
 obj-$(CONFIG_ASYNC_CORE) += async_tx/
+
+obj-$(CONFIG_CRYPTO_DEV_S5P_ACE) += ace.o

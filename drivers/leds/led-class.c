@@ -130,11 +130,10 @@ static int led_resume(struct device *dev)
  */
 int led_classdev_register(struct device *parent, struct led_classdev *led_cdev)
 {
-
 	led_cdev->dev = device_create(leds_class, parent, 0, led_cdev,
 				      "%s", led_cdev->name);
 	if (IS_ERR(led_cdev->dev))
-		return PTR_ERR(led_cdev->dev);	
+		return PTR_ERR(led_cdev->dev);
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	init_rwsem(&led_cdev->trigger_lock);
@@ -150,15 +149,15 @@ int led_classdev_register(struct device *parent, struct led_classdev *led_cdev)
 	led_update_brightness(led_cdev);
 
 #ifdef CONFIG_LEDS_TRIGGERS
-	led_trigger_set_default(led_cdev);	
-	//timer_trig_create_files(led_cdev);	// hanapark_DF22
+	led_trigger_set_default(led_cdev);
 #endif
 
-	printk(KERN_INFO "Registered led device: %s\n",
+	printk(KERN_DEBUG "Registered led device: %s\n",
 			led_cdev->name);
 
 	return 0;
 }
+
 EXPORT_SYMBOL_GPL(led_classdev_register);
 
 /**
@@ -191,7 +190,7 @@ static int __init leds_init(void)
 		return PTR_ERR(leds_class);
 	leds_class->suspend = led_suspend;
 	leds_class->resume = led_resume;
-        leds_class->dev_attrs = led_class_attrs;
+	leds_class->dev_attrs = led_class_attrs;
 	return 0;
 }
 

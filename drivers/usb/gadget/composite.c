@@ -26,7 +26,7 @@
 #include <linux/device.h>
 
 #include <linux/usb/composite.h>
-//#include <plat/devs.h>
+
 
 /*
  * The code in this file is utility code, used to build a gadget driver
@@ -39,6 +39,7 @@
 #define USB_BUFSIZ	1024
 
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+#  ifdef CONFIG_USB_ANDROID_SAMSUNG_MTP
 /* soonyong.cho : This is refered from S1.
  *                This code must be moved in mtp config function.
 */
@@ -51,7 +52,7 @@ struct os_string_descriptor_set {
 } __attribute__ ((packed));
 
 typedef struct os_string_descriptor_set os_string_descriptor_set;
-extern int currentusbstatus;
+#  endif
 #endif
 
 
@@ -68,7 +69,7 @@ extern int currentusbstatus;
 #  ifdef CSY_MORE_DEBUG
 #    define CSY_DBG(fmt, args...) printk(KERN_INFO "usb %s:%d "fmt, __func__, __LINE__, ##args)
 #  else
-#    define CSY_DBG(fmt, args...) printk(KERN_INFO "usb "fmt, ##args)
+#    define CSY_DBG(fmt, args...) printk(KERN_DEBUG "usb "fmt, ##args)
 #  endif
 #else /* DO NOT PRINT LOG */
 #  define CSY_DBG(fmt, args...) do { } while (0)
@@ -78,7 +79,7 @@ extern int currentusbstatus;
 #  ifdef CSY_MORE_DEBUG
 #    define CSY_DBG2(fmt, args...) printk(KERN_INFO "usb %s:%d "fmt, __func__, __LINE__, ##args)
 #  else
-#    define CSY_DBG2(fmt, args...) printk(KERN_INFO "usb "fmt, ##args)
+#    define CSY_DBG2(fmt, args...) printk(KERN_DEBUG "usb "fmt, ##args)
 #  endif
 #else /* DO NOT PRINT LOG */
 #  define CSY_DBG2(fmt, args...) do { } while (0)
@@ -88,7 +89,7 @@ extern int currentusbstatus;
 #  ifdef CSY_MORE_DEBUG
 #    define CSY_DBG_ESS(fmt, args...) printk(KERN_INFO "usb %s:%d "fmt, __func__, __LINE__, ##args)
 #  else
-#    define CSY_DBG_ESS(fmt, args...) printk(KERN_INFO "usb "fmt, ##args)
+#    define CSY_DBG_ESS(fmt, args...) printk(KERN_DEBUG "usb "fmt, ##args)
 #  endif
 #else /* DO NOT PRINT LOG */
 #  define CSY_DBG_ESS(fmt, args...) do { } while (0)
@@ -100,9 +101,6 @@ extern int currentusbstatus;
 	printk(KERN_INFO "usb %s:%d "fmt, __func__, __LINE__, ##args)
 #endif
 
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-extern int askon_status;
-#endif
 
 static struct usb_composite_driver *composite;
 
@@ -172,32 +170,7 @@ void usb_function_set_enabled(struct usb_function *f, int enabled)
 	kobject_uevent(&f->dev->kobj, KOBJ_CHANGE);
 }
 
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-void usb_composite_force_reset(struct usb_composite_dev *cdev)
-{
-        unsigned long                   flags;
 
-        spin_lock_irqsave(&cdev->lock, flags);
-        /* force reenumeration */
-        if (cdev && cdev->gadget &&
-                        cdev->gadget->speed != USB_SPEED_UNKNOWN) {
-                /* avoid sending a disconnect switch event until after we disconnect */
-                //cdev->mute_switch = 1; //nandu
-                spin_unlock_irqrestore(&cdev->lock, flags);
-                CSY_DBG_ESS("disconnect usb\n");
-                usb_gadget_disconnect(cdev->gadget);
-                msleep(10);
-                CSY_DBG_ESS("connect usb again\n");
-                usb_gadget_connect(cdev->gadget);
-        } else if (cdev && cdev->gadget && askon_status) {
-		spin_unlock_irqrestore(&cdev->lock, flags);
-		usb_gadget_connect(cdev->gadget);
-	} else {
-                CSY_DBG_ESS("skip reset\n");
-                spin_unlock_irqrestore(&cdev->lock, flags);
-        }
-}
-#else
 void usb_composite_force_reset(struct usb_composite_dev *cdev)
 {
 	unsigned long			flags;
@@ -211,7 +184,7 @@ void usb_composite_force_reset(struct usb_composite_dev *cdev)
 		spin_unlock_irqrestore(&cdev->lock, flags);
 		CSY_DBG_ESS("disconnect usb\n");
 		usb_gadget_disconnect(cdev->gadget);
-		msleep(10);
+		msleep(20);
 		CSY_DBG_ESS("connect usb again\n");
 		usb_gadget_connect(cdev->gadget);
 	} else {
@@ -219,7 +192,6 @@ void usb_composite_force_reset(struct usb_composite_dev *cdev)
 		spin_unlock_irqrestore(&cdev->lock, flags);
 	}
 }
-#endif
 
 /**
  * usb_add_function() - add a function to a configuration
@@ -395,6 +367,24 @@ int usb_interface_id(struct usb_configuration *config,
 	}
 	return -ENODEV;
 }
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+struct usb_function * find_usb_function(struct usb_composite_dev	*cdev, char * function_name)
+{ 
+    struct usb_function		*f;
+    struct usb_configuration *c = NULL;
+    
+    list_for_each_entry(c, &cdev->configs, list) {
+        list_for_each_entry(f, &c->functions, list) {   
+                if (!strcmp(f->name, function_name))
+                {    
+                    return f;
+                 }                
+        }
+
+    }
+    return NULL;    
+}
+#endif
 
 static int config_buf(struct usb_configuration *config,
 		enum usb_device_speed speed, void *buf, u8 type)
@@ -411,6 +401,8 @@ static int config_buf(struct usb_configuration *config,
 /* soonyong.cho : set interface number dynamically based on product function sequence. */
 	int i;
 	char **product_functions = config->cdev->products->functions;
+	int index_intf;
+	int change_intf;
 #endif
 	/* write the config descriptor */
 	c = buf;
@@ -432,7 +424,6 @@ static int config_buf(struct usb_configuration *config,
 		next += status;
 	}
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : set interface number dynamically based on product function sequence. */
 	CSY_DBG("config_buf config->cdev=0x%p\n", config->cdev);
 	for(i=0; i < config->cdev->product_num; i++)
 	{
@@ -443,12 +434,13 @@ static int config_buf(struct usb_configuration *config,
 		struct usb_descriptor_header **descriptors;
 		struct usb_descriptor_header *descriptor;
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : set interface number dynamically based on product function sequence. */
 			CSY_DBG("i=%d config-cdev->product_num=%d, p_func=%s, c_func=%s\n",
 			i, config->cdev->product_num, product_function,  f->name);
 			if(!strcmp(f->name, product_function))
 			{
 				CSY_DBG("set interface number (%s)\n", f->name);
+				index_intf = 0;
+				change_intf = 0;
 #endif
 		if (speed == USB_SPEED_HIGH)
 			descriptors = f->hs_descriptors;
@@ -474,21 +466,50 @@ static int config_buf(struct usb_configuration *config,
 					intf->bInterfaceNumber = interfaceCount++;
 				else
 					intf->bInterfaceNumber = interfaceCount - 1;
-						CSY_DBG("config_buf %s function (interfaceCount=%d)\n",f->name, intf->bInterfaceNumber);
-			}
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+						config->interface
+						    [intf->bInterfaceNumber]
+						    = f;
+						if (f->set_intf_num) {
+							change_intf = 1;
+							f->set_intf_num(f,
+							intf->bInterfaceNumber,
+							index_intf++);
+						}
+						CSY_DBG(
+							"%s function=%d)\n",
+							f->name,
+							intf->bInterfaceNumber);
+#endif
+					}
 			dest += intf->bLength;
 		}
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+				if (change_intf) {
+					if (speed == USB_SPEED_HIGH)
+						descriptors = f->hs_descriptors;
+					else
+						descriptors = f->descriptors;
+					status = usb_descriptor_fillbuf(
+						next, len,
+					(const struct usb_descriptor_header **)
+						descriptors);
+					if (status < 0)
+						return status;
+				}
+#endif
 		len -= status;
 		next += status;
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : set interface number dynamically based on product function sequence. */
 			}
 #endif
 	}
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : set interface number dynamically based on product function sequence. */
 	}
+	config->next_interface_id = interfaceCount;
+	for (i = interfaceCount; i < MAX_CONFIG_INTERFACES; i++)
+		config->interface[i] = 0;
 #endif
 	len = next - buf;
 	c->wTotalLength = cpu_to_le16(len);
@@ -867,6 +888,7 @@ static int get_string(struct usb_composite_dev *cdev,
 		return s->bLength;
 	}
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+#  ifdef CONFIG_USB_ANDROID_SAMSUNG_MTP
 /* soonyong.cho : This is refered from S1
  *		  This code must be moved in mtp config function
  */
@@ -914,6 +936,7 @@ static int get_string(struct usb_composite_dev *cdev,
 			return os_desc->bLength;
 		}
 	}
+#endif
 #endif
 
 	/* Otherwise, look up and return a specified string.  String IDs
@@ -998,6 +1021,10 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	int i;
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+        struct usb_function		*pusbfunction=NULL;
+#endif
+#  ifdef CONFIG_USB_ANDROID_SAMSUNG_MTP
 /* soonyong.cho : Added handler to respond to host about MS OS Descriptors.
  * 		  Below compatible ID is for MTP.
  *		  So, If you set composite included MTP, you have to respond to host about 0x54 request.
@@ -1006,17 +1033,8 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	char ms_descriptor[38] = { 0x00, 0x00, 0x00, 0x01, 0x04, 0x00,0x01,0x00,0x00,0x00,0x00,0x00, 0x00, 0x00, 0x00, 0x01, 
 	 0x4D, 0x54, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	 
+#  endif
 #endif
-
-	unsigned long	flags;	
-	spin_lock_irqsave(&cdev->lock, flags);
-	if (!cdev->connected) {
-		cdev->connected = 1;
-		schedule_work(&cdev->switch_work);
-	}
-	spin_unlock_irqrestore(&cdev->lock, flags);
-
 	/* partial re-init of the response message; the function or the
 	 * gadget might need to intercept e.g. a control-OUT completion
 	 * when we delegate to it.
@@ -1029,6 +1047,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 
 	switch (ctrl->bRequest) {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+#  ifdef CONFIG_USB_ANDROID_SAMSUNG_MTP
 	/* soonyong.cho : Added handler to respond to host about MS OS Descriptors.
 	 * 		  Below handler is requirement if you use MTP.
 	 *		  So, If you set composite included MTP, you have to respond to host about 0x54 request
@@ -1039,11 +1058,9 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			for(i = 0; i < cdev->product_num; i++) {
 				if (!strcmp(cdev->products->functions[i], "mtp")) {
 					struct usb_string_descriptor *os_func_desc = req->buf;
-					CSY_DBG_ESS("0x54 request, mode=mtp, p_num=%d, f_index=%d\n",cdev->product_num,i);
+					CSY_DBG("0x54 request, mode=mtp, p_num=%d, f_index=%d\n",cdev->product_num,i);
 					os_func_desc->bDescriptorType = 0x00;
-					//memcpy(os_func_desc->wData, &ms_descriptor, sizeof(ms_descriptor));
 					memcpy(os_func_desc->wData, &ms_descriptor, 40);
-					//value = sizeof(ms_descriptor);
 					os_func_desc->bLength = value = 0x28;
 			               	if (value >= 0) {
 			                    value = min(w_length, (u16) value);
@@ -1053,16 +1070,41 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			}
 		}
 		break;
-
+#  endif	
 #endif
-	/* we handle all standard USB descriptors */
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	/* Handle accessory mode request */
+    case ACCESSORY_GET_PROTOCOL: 
+    case ACCESSORY_SEND_STRING:
+    case ACCESSORY_START:
+                          
+            pusbfunction = find_usb_function(cdev,"accessory");
+
+            if (pusbfunction&& pusbfunction->setup)
+            {  
+                    value = pusbfunction->setup(pusbfunction, ctrl);
+                   if ( value< 0 )
+                    {
+                        CSY_DBG_ESS("composite_setup: acceeory mode setup error \r\n");
+                    }
+                   else
+                    {
+                       cdev->accessory_mode =1;                   
+                       goto done;
+                    }
+            }
+            else
+                CSY_DBG_ESS("composite_setup: usb function find fail \r\n");
+            break;
+#endif 
+   
 	case USB_REQ_GET_DESCRIPTOR:
 		if (ctrl->bRequestType != USB_DIR_IN)
 			goto unknown;
 		switch (w_value >> 8) {
 
 		case USB_DT_DEVICE:
-			CSY_DBG_ESS("GET_DES-DEV\n");
+			CSY_DBG("GET_DES-DEV\n");
 			cdev->desc.bNumConfigurations =
 				count_configs(cdev, USB_DT_DEVICE);
 			value = min(w_length, (u16) sizeof cdev->desc);
@@ -1082,7 +1124,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				break;
 			/* FALLTHROUGH */
 		case USB_DT_CONFIG:
-			CSY_DBG_ESS("GET_DES-CON\n");
+			CSY_DBG("GET_DES-CON\n");          
 			value = config_desc(cdev, w_value);
 			if (value >= 0)
 				value = min(w_length, (u16) value);
@@ -1200,36 +1242,6 @@ unknown:
 			if (cdev->config == NULL)
 				return value;
 
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : RNDIS interface must be setted to 0.
- *                But sequence to set interface is depend on all functions list.
- *		  So, If you don't set RNDIS interface firstly in all functions list,
- *		  you have to change interface number to real rndis interface number from w_index.
- */
-#  ifdef CSY_DBG
-			for (i = 0; i < MAX_CONFIG_INTERFACES; i++) {
-				f = cdev->config->interface[i];
-				CSY_DBG("interface %d f=0x%p\n", i, f);
-				if (!f)
-					continue;
-				CSY_DBG("interface %d = %s/%p disabled=%d\n", i, f->name, f, f->disabled);
-			}
-#  endif
-			for (i = 0; i < MAX_CONFIG_INTERFACES; i++) {
-				f = cdev->config->interface[i];
-				if (!f)
-					continue;
-
-				/* RNDIS interface number must be changed to real interface number if rndis is enabled. */
-				if ((f->disabled == 0) && (!strcmp(f->name, "rndis"))) {
-					if ((i != intf) && (intf == 0)) {
-						CSY_DBG("chaged intf to %d from %d (name=%s)\n", i, intf, f->name);
-						intf = i;
-					}
-					break;
-				}
-			}
-#endif
 			f = cdev->config->interface[intf];
 			CSY_DBG("f=0x%p, f->setup=0x%p, f->name=%s\n", f, f->setup, f->name);
 			break;
@@ -1295,8 +1307,15 @@ unknown:
 	}
 
 done:
-	//if(cdev->mute_switch)
-	//	cdev->mute_switch = 0; //nandu
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+/* Problem  : Re-enumeration when select tethering mode
+ * Cause    : Some disconnect intend happen
+ * Solution : When disconnect intend happened so many times, block it before connect a usb
+ * This patch refered from S1_GINGER (CL:4043)
+ */
+	if(cdev->mute_switch)
+		cdev->mute_switch = 0;
+#endif
 	CSY_DBG("--setup value=%d\n", value);
 	/* device either stalls (value < 0) or reports success */
 	return value;
@@ -1312,26 +1331,32 @@ static void composite_disconnect(struct usb_gadget *gadget)
 	 */
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (cdev->config) {
-		printk("composite_disconnect -> reset_config\n");
+		CSY_DBG_ESS("composite_disconnect -> reset_config\n");
 		reset_config(cdev);
 	}
 
-	#if 0
 	if (cdev->mute_switch) {
-	/* Replace below sequence (mute_switch value set 0),
-           some times, disconnect is called more then one time.*/
-		//cdev->mute_switch = 0;
-		printk("composite_disconnect -> mute_switch\n");
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+/* Problem  : Re-enumeration when select tethering mode
+ * Cause    : Some disconnect intend happen
+ * Solution : When disconnect intend happened so many times, block it before connect a usb
+ * This patch refered from S1_GINGER (CL:4043)
+ * Replace below sequence (mute_switch value set 0),
+ * Sometimes, disconnect is called more then one time.
+ */
+ 	
+#else
+		cdev->mute_switch = 0;
+#endif
+		CSY_DBG_ESS("composite_disconnect -> mute_switch\n");
 	}
 	else {
 		schedule_work(&cdev->switch_work);
-		printk("composite_disconnect -> switch_work\n");
+		CSY_DBG_ESS("composite_disconnect -> switch_work\n");
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+                cdev->accessory_mode=0;
+#endif
 	}
-	#endif
-
-	cdev->connected = 0;
-	schedule_work(&cdev->switch_work);
-
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
@@ -1396,8 +1421,7 @@ composite_unbind(struct usb_gadget *gadget)
 		usb_ep_free_request(gadget->ep0, cdev->req);
 	}
 
-	//switch_dev_unregister(&cdev->sdev);
-	switch_dev_unregister(&cdev->sw_connected);
+	switch_dev_unregister(&cdev->sdev);
 	kfree(cdev);
 	set_gadget_data(gadget, NULL);
 	device_remove_file(&gadget->dev, &dev_attr_suspended);
@@ -1433,28 +1457,12 @@ composite_switch_work(struct work_struct *data)
 		container_of(data, struct usb_composite_dev, switch_work);
 	struct usb_configuration *config = cdev->config;
 
-	printk("[composite_switch_work]config=0x%p\n",(void*)config);
+	CSY_DBG_ESS("[composite_switch_work]config=0x%p\n",(void*)config);
 
-	int connected;
-	unsigned long flags;
-	
-	spin_lock_irqsave(&cdev->lock, flags);
-	if(cdev->connected != cdev->sw_connected.state) {
-		connected = cdev->connected;
-		spin_unlock_irqrestore(&cdev->lock, flags);
-		switch_set_state(&cdev->sw_connected, connected);
-	} else {
-		spin_unlock_irqrestore(&cdev->lock, flags);
-	}
-
-	if(currentusbstatus != USBSTATUS_SAMSUNG_KIES){
-		if (config){
-//			switch_set_state(&cdev->sdev, config->bConfigurationValue);
-			printk("[composite_switch_work] config->bConfigurationValue =%d\n",config->bConfigurationValue);
-		}
-		else ;
-//			switch_set_state(&cdev->sdev, 0);
-	}
+	if (config)
+		switch_set_state(&cdev->sdev, config->bConfigurationValue);
+	else
+		switch_set_state(&cdev->sdev, 0);
 }
 
 static int composite_bind(struct usb_gadget *gadget)
@@ -1509,16 +1517,10 @@ static int composite_bind(struct usb_gadget *gadget)
 	if (status < 0)
 		goto fail;
 
-	cdev->sw_connected.name = "usb_connected";
-	status = switch_dev_register(&cdev->sw_connected);
-	if (status <0)
-		goto fail;
-#if 0
 	cdev->sdev.name = "usb_configuration";
 	status = switch_dev_register(&cdev->sdev);
 	if (status < 0)
 		goto fail;
-#endif
 	INIT_WORK(&cdev->switch_work, composite_switch_work);
 
 	cdev->desc = *composite->dev;

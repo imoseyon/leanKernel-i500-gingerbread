@@ -1242,9 +1242,11 @@ static unsigned long shrink_inactive_list(unsigned long max_scan,
 		nr_scanned += nr_scan;
 		nr_freed = shrink_page_list(&page_list, sc, PAGEOUT_IO_ASYNC);
 
-			/* Check if we should syncronously wait for writeback */
+		/* Check if we should syncronously wait for writeback */
 		if (should_reclaim_stall(nr_taken, nr_reclaimed, priority, sc)) {
-			congestion_wait(BLK_RW_ASYNC, HZ/10);
+		    //[PATCH] vmscan: synchronous lumpy reclaim don't call congestion_wait()
+		    // owner : KOSAKI Motohiro -  http://lkml.org/lkml/2010/8/1/45
+			//congestion_wait(BLK_RW_ASYNC, HZ/10);
 
 			/*
 			 * The attempt at page out may have made some

@@ -22,6 +22,10 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/fs.h>
+#ifdef CONFIG_BATTERY_MAX17043
+#include <linux/irq.h>
+#include <linux/interrupt.h>
+#endif
 
 #define MAX17040_VCELL_MSB	0x02
 #define MAX17040_VCELL_LSB	0x03
@@ -137,94 +141,33 @@ static void max17040_get_soc(struct i2c_client *client)
 	u8 msb;
 	u8 lsb;
 	int pure_soc, adj_soc, soc;
+	int full = chip->pdata->psoc_full;
+	int empty = chip->pdata->psoc_empty;
+
+	if (full == 0)
+		full = 100;
+	if (empty == 0)
+		empty = 0;
 
 	msb = max17040_read_reg(client, MAX17040_SOC_MSB);
 	lsb = max17040_read_reg(client, MAX17040_SOC_LSB);
 
-#if defined (CONFIG_S5PV210_GARNETT_DELTA)
-
-	/*Adjusted SOC(Garnett)
-	**RCOMP : A0h, FULL : 95.0, EMPTY : 1.2
-	**Adj_soc = (SOC%-EMPTY)/(FULL-EMPTY)*100
-	*/
-
-	pure_soc = msb * 100 + ((lsb * 100) / 256);
-
-	if (pure_soc >= 0)
-		adj_soc = ((pure_soc * 10000) - 120) / (9500 - 120);
-	else
-		adj_soc = 0;
-
-	soc = adj_soc / 100;
-
-	if (adj_soc % 100 >= 50)
-		soc += 1;
-
-#elif defined (CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_FORTE)
-	pure_soc = msb * 100 + ((lsb * 100) / 256);
-
-	if (pure_soc >= 100)
-		adj_soc = pure_soc;
-	else {
-		if(pure_soc >= 70)
-			adj_soc = 100;
-		else
-			adj_soc = 0;
-	}
-
-	soc = adj_soc / 100;
-
-	if (adj_soc % 100 >= 50)
-		soc += 1;
-
-	if (soc >= 26)
-		soc += 4;
-	else
-		soc = (30 * adj_soc) / 26 / 100;
-
-	if (soc >= 100)
-		soc = 100;
-
-#elif defined (CONFIG_MACH_VICTORY)
-
-	/*Adjusted SOC(Victory)
-	**RCOMP : D0h, FULL : 94.3, EMPTY : 1.4
-	**Adj_soc = (SOC%-EMPTY)/(FULL-EMPTY)*100
-	*/
-
-	pure_soc = msb * 100 + ((lsb * 100) / 256);
-
-	if (pure_soc >= 0)
-		adj_soc = ((pure_soc * 10000) - 140) / (9430 - 140);
-	else
-		adj_soc = 0;
-
-	soc = adj_soc / 100;
-
-	if (adj_soc % 100 >= 50)
-		soc += 1;
-
-#else
-
 	pure_soc = msb * 100 + (lsb * 100) / 256;
 
-	if (pure_soc >= 100)
-		adj_soc = pure_soc;
-	else if (pure_soc >= 70)
-		adj_soc = 100; // 1%
+	if (pure_soc >= 0)
+		adj_soc = ((pure_soc * 10000) - empty) / (full - empty);
 	else
-		adj_soc = 0; // 0%
+		adj_soc = 0;
 
-	if (adj_soc < 1500)
-		soc = (adj_soc * 4 / 3 + 50) / 100;
-	else if (adj_soc < 7600)
-		soc = adj_soc / 100 + 5;
-	else
-		soc = ((adj_soc - 7600) * 8 / 10 + 50) / 100 + 81;
+	soc = adj_soc / 100;
 
-#endif
+	if (adj_soc % 100 >= 50)	// ¹Ý¿Ã¸²
+		soc += 1;
 
-	chip->soc = min(soc, 100);
+	if (soc > 100)
+		soc = 100;
+
+	chip->soc = min(soc, (uint)100);
 }
 
 static void max17040_get_version(struct i2c_client *client)
@@ -302,6 +245,37 @@ void max17040_reset_soc(void)
 }
 EXPORT_SYMBOL(max17040_reset_soc);
 
+unsigned int max17040_read_raw_soc(void)
+{
+	struct i2c_client *client = fg_i2c_client;
+	u8 msb;
+	u8 lsb;
+	int pure_soc;
+
+	msb = max17040_read_reg(client, MAX17040_SOC_MSB);
+	lsb = max17040_read_reg(client, MAX17040_SOC_LSB);
+
+	return msb;
+}
+EXPORT_SYMBOL(max17040_read_raw_soc);
+
+unsigned int max17040_read_raw_vcell(void)
+{
+	struct i2c_client *client = fg_i2c_client;
+	u8 msb;
+	u8 lsb;
+	int vcell = 0;
+
+	msb = max17040_read_reg(client, MAX17040_VCELL_MSB);
+	lsb = max17040_read_reg(client, MAX17040_VCELL_LSB);
+
+	vcell = msb << 8 | lsb;
+	vcell = (vcell >> 4) * 125 * 1000;
+
+	return vcell;
+}
+EXPORT_SYMBOL(max17040_read_raw_vcell);
+
 static ssize_t max17040_show_fg_soc(struct device *device,
 				    struct device_attribute *attr, char *buf)
 {
@@ -311,8 +285,7 @@ static ssize_t max17040_show_fg_soc(struct device *device,
 
 	return sprintf(buf, "%d\n", chip->soc);	
 }
-static DEVICE_ATTR(set_fuel_gauage_read, 0664,
-		   max17040_show_fg_soc, NULL);
+static DEVICE_ATTR(set_fuel_gauage_read, 0664, max17040_show_fg_soc, NULL);
 
 static ssize_t max17040_show_fg_reset(struct device *device,
 				      struct device_attribute *attr, char *buf)
@@ -325,8 +298,7 @@ static ssize_t max17040_show_fg_reset(struct device *device,
 
 	return sprintf(buf,"%d\n", ret);
 }
-static DEVICE_ATTR(set_fuel_gauage_reset, 0664,
-		   max17040_show_fg_reset, NULL);
+static DEVICE_ATTR(set_fuel_gauage_reset, 0664, max17040_show_fg_reset, NULL);
 
 static enum power_supply_property max17040_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
@@ -334,6 +306,60 @@ static enum power_supply_property max17040_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 };
+
+#ifdef CONFIG_BATTERY_MAX17043
+static irqreturn_t max17043_isr(int irq, void *data)
+{
+	struct max17040_chip *chip = data;
+	struct i2c_client *client = chip->client;
+	u8 msb;
+	u8 lsb;
+	int raw_soc;
+
+	max17040_get_soc(client);
+
+	msb = max17040_read_reg(client, MAX17040_SOC_MSB);
+	lsb = max17040_read_reg(client, MAX17040_SOC_LSB);
+
+	raw_soc = msb * 100 + (lsb * 100) / 256;
+
+	msb = max17040_read_reg(client, MAX17040_RCOMP_MSB);
+	lsb = max17040_read_reg(client, MAX17040_RCOMP_LSB);
+
+	dev_info(&client->dev, "%s: msb=0x%x, lsb=0x%x (raw_soc=%d, adj_soc=%d)\n",
+		__func__, msb, lsb, raw_soc, chip->soc);
+
+	/* clear ALRT bit to enable next irq */
+	lsb = lsb & ~(0x20);
+	i2c_smbus_write_word_data(client, MAX17040_RCOMP_MSB,
+				  swab16((msb << 8) + lsb));
+
+	return IRQ_HANDLED;
+}
+
+static int max17043_irq_init(struct max17040_chip *chip)
+{
+	struct i2c_client *client = chip->client;
+	int ret;
+
+	if (client->irq) {
+		ret = request_threaded_irq(client->irq, NULL,
+			max17043_isr, IRQF_TRIGGER_FALLING,
+			"max17043 fuel gauge", chip);
+		if (ret) {
+			dev_err(&client->dev, "failed to reqeust IRQ\n");
+			return ret;
+		}
+
+		ret = enable_irq_wake(client->irq);
+		if (ret < 0)
+			dev_err(&client->dev,
+				"failed to enable wakeup src %d\n", ret);
+	}
+
+	return 0;
+}
+#endif
 
 static int __devinit max17040_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -393,6 +419,10 @@ static int __devinit max17040_probe(struct i2c_client *client,
 	ret = device_create_file(chip->fg_atcmd, &dev_attr_set_fuel_gauage_reset);
 	if (ret)
 		goto err_fg_reset;
+
+#ifdef CONFIG_BATTERY_MAX17043
+	max17043_irq_init(chip);
+#endif
 
 	return 0;
 

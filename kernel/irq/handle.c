@@ -24,7 +24,6 @@
 
 #include "internals.h"
 
-
 #ifdef CONFIG_KERNEL_DEBUG_SEC
 #include <linux/kernel_sec_common.h>
 #endif
@@ -375,15 +374,16 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 	irqreturn_t ret, retval = IRQ_NONE;
 	unsigned int status = 0;
 #ifdef CONFIG_KERNEL_DEBUG_SEC
-	int cpu;
-	cpu = smp_processor_id();
+    int cpu;
+    cpu = smp_processor_id();
 #endif
+
 	do {
 #ifdef CONFIG_KERNEL_DEBUG_SEC
-		gExcpTaskLog[gExcpTaskLogIdx].time = cpu_clock(cpu);
-		gExcpTaskLog[gExcpTaskLogIdx].log.irq.dummy = 0;
-		gExcpTaskLog[gExcpTaskLogIdx].log.irq.fn = (void *)action->handler;
-		gExcpTaskLogIdx = (++gExcpTaskLogIdx >= SCHED_LOG_MAX)? 0 : gExcpTaskLogIdx;
+        gExcpTaskLog[gExcpTaskLogIdx].time = cpu_clock(cpu);
+        gExcpTaskLog[gExcpTaskLogIdx].log.irq.dummy = 0;
+        gExcpTaskLog[gExcpTaskLogIdx].log.irq.fn = (void *)action->handler;
+        gExcpTaskLogIdx = (++gExcpTaskLogIdx >= SCHED_LOG_MAX)? 0 : gExcpTaskLogIdx;
 #endif
 		trace_irq_handler_entry(irq, action);
 		ret = action->handler(irq, action->dev_id);
@@ -396,6 +396,7 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 			 * does not trigger.
 			 */
 			ret = IRQ_HANDLED;
+
 			/*
 			 * Catch drivers which return WAKE_THREAD but
 			 * did not set up a thread function

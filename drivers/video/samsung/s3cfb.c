@@ -10,6 +10,8 @@
  * published by the Free Software Foundation.
 */
 
+#include <linux/gpio.h>
+#include <linux/gpio_event.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -37,31 +39,44 @@
 #include <linux/earlysuspend.h>
 #include <linux/suspend.h>
 #endif
+#include <mach/regs-gpio.h>
+#include <mach/gpio.h>
+
 #include "s3cfb.h"
-//#include "logo_rgb24_wvga_portrait.h"
+#if defined(CONFIG_ARIES_EUR)
+#include "logo_rgb24_wvga_portrait.h"
+#elif defined(CONFIG_ARIES_NTT)
+#include "logo_rgb24_wvga_portrait_docomo.h"
+#elif defined(CONFIG_STEALTHV_USA)
+#include "logo_rgb24_wvga_portrait.h"
+#elif defined(CONFIG_MACH_VIPER)
+#include "logo_rgb24_hvga_portrait.h"	/* 320x480 */
+#elif defined(CONFIG_MACH_AEGIS)
+#include "logo_rgb24_wvga_portrait.h"
+#elif defined(CONFIG_MACH_CHIEF)
+#include "logo_rgba32_hvga_portrait.h"	/* 320x480 */
+#include <mach/regs-clock.h>
+#endif
 #ifdef CONFIG_FB_S3C_MDNIE
 #include "s3cfb_mdnie.h"
 #include <linux/delay.h>
 #include <mach/regs-clock.h>
 #endif
-#include <plat/media.h>
+
 #define BOOT_FB_WINDOW	0
 
+extern unsigned int HWREV;
 /*
  *  Mark for GetLog (tkhwang)
  */
-#if defined (CONFIG_FB_S3C_TL2796)
-extern void tl2796_ldi_stand_by(void);
-extern void tl2796_ldi_wake_up(void);
-#elif defined(CONFIG_FB_S3C_S6D16A0X)
+#if defined(CONFIG_FB_S3C_S6D16A0X)
 extern void s6d16a0x_ldi_stand_by(void);
 extern void s6d16a0x_ldi_wake_up(void);
-void lcd_cfg_gpio_early_suspend(void);
-void lcd_cfg_gpio_late_resume(void);
-void s6d16a0x_ldi_disable(void);
-void s6d16a0x_ldi_init(void);
-void s6d16a0x_ldi_enable(void);
+extern void s6d16a0x_ldi_init(void);
+extern void s6d16a0x_ldi_enable(void);
+extern void s6d16a0x_ldi_disable(void);
 #endif
+
 struct struct_frame_buf_mark {
 	u32 special_mark_1;
 	u32 special_mark_2;
@@ -80,9 +95,9 @@ static struct struct_frame_buf_mark  frame_buf_mark = {
 	.special_mark_3 = (('H' << 24) | ('e' << 16) | ('r' << 8) | ('e' << 0)),
 	.special_mark_4 = (('f' << 24) | ('b' << 16) | ('u' << 8) | ('f' << 0)),
 	.p_fb   = 0,
-#ifdef CONFIG_MACH_FORTE
-	.resX   = 320, 
-	.resY   = 480, 
+#ifdef CONFIG_MACH_CHIEF	// heatup - chief
+	.resX   = 320,
+	.resY   = 480,
 #else
 	.resX   = 480,
 	.resY   = 800,
@@ -98,7 +113,6 @@ struct s3c_platform_fb *to_fb_plat(struct device *dev)
 	return (struct s3c_platform_fb *)pdev->dev.platform_data;
 }
 
-char LCD_ON_OFF = 1; 
 static unsigned int bootloaderfb;
 module_param_named(bootloaderfb, bootloaderfb, uint, 0444);
 MODULE_PARM_DESC(bootloaderfb, "Address of booting logo image in Bootloader");
@@ -155,10 +169,11 @@ static int s3cfb_draw_logo(struct fb_info *fb)
 		iounmap(logo_virt_buf);
 	}
 */
-	/*if (readl(S5P_INFORM5)) //LPM_CHARGING mode
+
+	if (readl(S5P_INFORM5)) //LPM_CHARGING mode 
 		memcpy(fb->screen_base, charging, fb->var.yres * fb->fix.line_length);
 	else
-		//memcpy(fb->screen_base, LOGO_RGB24, fb->var.yres * fb->fix.line_length);*/
+		memcpy(fb->screen_base, LOGO_RGB24, fb->var.yres * fb->fix.line_length);
 	return 0;
 }
 #endif
@@ -234,7 +249,7 @@ static int s3cfb_map_video_memory(struct fb_info *fb)
 			 (unsigned int)fix->smem_start,
 			 (unsigned int)fb->screen_base, fix->smem_len);
 
-	//memset(fb->screen_base, 0, fix->smem_len);
+	memset(fb->screen_base, 0, fix->smem_len);
 	win->owner = DMA_MEM_FIMD;
 
 	/*
@@ -969,39 +984,6 @@ static int s3cfb_sysfs_store_win_power(struct device *dev,
 static DEVICE_ATTR(win_power, S_IRUGO | S_IWUSR,
 		   s3cfb_sysfs_show_win_power, s3cfb_sysfs_store_win_power);
 
-static int s3cfb_sysfs_show_lcd_power(struct device *dev, struct device_attribute *attr, char *buf)
-{
-        return ;
-}
-
-static int s3cfb_sysfs_store_lcd_power(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
-{
-        if (len < 1)
-                return -EINVAL;
-#if defined(CONFIG_FB_S3C_TL2796)
-        if (strnicmp(buf, "on", 2) == 0 || strnicmp(buf, "1", 1) == 0)
-                tl2796_ldi_wake_up();
-        else if (strnicmp(buf, "off", 3) == 0 || strnicmp(buf, "0", 1) == 0)
-                tl2796_ldi_stand_by();
-        else
-                return -EINVAL;
-#elif defined(CONFIG_FB_S3C_S6D16A0X)
-        if (strnicmp(buf, "on", 2) == 0 || strnicmp(buf, "1", 1) == 0)
-                s6d16a0x_ldi_wake_up();
-        else if (strnicmp(buf, "off", 3) == 0 || strnicmp(buf, "0", 1) == 0)
-                s6d16a0x_ldi_stand_by();
-        else
-                return -EINVAL;
-#endif
-
-
-        return len;
-}
-
-
-static DEVICE_ATTR(lcd_power, 0664,s3cfb_sysfs_show_lcd_power,s3cfb_sysfs_store_lcd_power);
-
-
 static int __devinit s3cfb_probe(struct platform_device *pdev)
 {
 	struct s3c_platform_fb *pdata;
@@ -1066,8 +1048,14 @@ static int __devinit s3cfb_probe(struct platform_device *pdev)
 
 	fbdev->lcd = (struct s3cfb_lcd *)pdata->lcd;
 
+#ifndef CONFIG_MACH_CHIEF	// heatup - chief - block
 	if (pdata->cfg_gpio)
 		pdata->cfg_gpio(pdev);
+#endif		
+
+#ifdef CONFIG_MACH_AEGIS
+	s5p_gpio_set_drvstr(GPIO_DISPLAY_PCLK, 0x03);
+#endif
 
 	if (pdata->clk_on)
 		pdata->clk_on(pdev, &fbdev->clock);
@@ -1133,7 +1121,7 @@ static int __devinit s3cfb_probe(struct platform_device *pdev)
 	s3cfb_display_on(fbdev);
 
 	fbdev->irq = platform_get_irq(pdev, 0);
-	if (request_irq(fbdev->irq, s3cfb_irq_frame,IRQF_SHARED,
+	if (request_irq(fbdev->irq, s3cfb_irq_frame, IRQF_SHARED,
 			pdev->name, fbdev)) {
 		dev_err(fbdev->dev, "request_irq failed\n");
 		ret = -EINVAL;
@@ -1157,10 +1145,6 @@ static int __devinit s3cfb_probe(struct platform_device *pdev)
 	fbdev->early_suspend.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
 	register_early_suspend(&fbdev->early_suspend);
 #endif
-
-	ret = device_create_file(&(pdev->dev), &dev_attr_lcd_power);
-        if (ret < 0)
-            dev_err(fbdev->dev, "s3cfb: failed to add dev_attr_lcd_power\n");
 
 	ret = device_create_file(&(pdev->dev), &dev_attr_win_power);
 	if (ret < 0)
@@ -1265,10 +1249,8 @@ void s3cfb_early_suspend(struct early_suspend *h)
 	struct s3cfb_global *fbdev =
 		container_of(h, struct s3cfb_global, early_suspend);
 
-	pr_debug("s3cfb_early_suspend is called\n");
-#if defined(CONFIG_FB_S3C_S6D16A0X)
-       s6d16a0x_ldi_disable();
-#endif
+	printk("%s\n",__FUNCTION__);
+
 #ifdef CONFIG_FB_S3C_MDNIE
 	writel(0,fbdev->regs + 0x27c);
 	msleep(20);
@@ -1281,12 +1263,20 @@ void s3cfb_early_suspend(struct early_suspend *h)
 	s3c_mdnie_off();
 #endif 
 	clk_disable(fbdev->clock);
-#if defined(CONFIG_FB_S3C_TL2796)
+#if defined(CONFIG_FB_S3C_TL2796) || defined(CONFIG_FB_S3C_LD9040) || defined(CONFIG_FB_S3C_S6D05A1X12)
 	lcd_cfg_gpio_early_suspend();
-	LCD_ON_OFF = 0;
+#elif defined(CONFIG_FB_S3C_S6D16A0X) && defined(CONFIG_MACH_CHIEF) 
+	s6d16a0x_ldi_disable();
 #endif
 	regulator_disable(fbdev->vlcd);
-	regulator_disable(fbdev->vcc_lcd);
+
+#ifdef CONFIG_MACH_AEGIS
+	if(HWREV!=0)
+		regulator_disable(fbdev->vcc_lcd);		
+#else
+	regulator_disable(fbdev->vcc_lcd);		
+#endif
+
 	regulator_disable(fbdev->regulator);
 
 	return ;
@@ -1302,7 +1292,7 @@ void s3cfb_late_resume(struct early_suspend *h)
 	struct s3cfb_window *win;
 	int i, j, ret;
 
-        pr_info("s3cfb_late_resume is called\n");
+	printk("%s\n",__FUNCTION__);
 
 	ret = regulator_enable(fbdev->regulator);
 	if (ret < 0)
@@ -1316,14 +1306,21 @@ void s3cfb_late_resume(struct early_suspend *h)
 	if (ret < 0)
 		dev_err(fbdev->dev, "failed to enable vlcd\n");
 
-#if defined(CONFIG_FB_S3C_TL2796)
+#if defined(CONFIG_FB_S3C_TL2796) || defined(CONFIG_FB_S3C_LD9040) || defined(CONFIG_FB_S3C_S6D05A1X12)
 	lcd_cfg_gpio_late_resume();
-	LCD_ON_OFF = 1;
 #endif
 	dev_dbg(fbdev->dev, "wake up from suspend\n");
 	if (pdata->cfg_gpio)
 		pdata->cfg_gpio(pdev);
+#if defined(CONFIG_MACH_CHIEF)
+#if defined(CONFIG_FB_S3C_S6D16A0X)   
+	if (pdata->reset_lcd)
+		pdata->reset_lcd(pdev);
 
+	s6d16a0x_ldi_init();
+	s6d16a0x_ldi_enable();
+#endif
+#endif
 	clk_enable(fbdev->clock);
 #ifdef CONFIG_FB_S3C_MDNIE
 	writel(0x1, S5P_MDNIE_SEL);
@@ -1336,6 +1333,7 @@ void s3cfb_late_resume(struct early_suspend *h)
 	s3c_mdnie_start(fbdev);
 #endif
 	s3cfb_set_alpha_value_width(fbdev, pdata->default_win);
+
 	s3cfb_display_on(fbdev);
 
 	for (i = pdata->default_win;
@@ -1348,16 +1346,14 @@ void s3cfb_late_resume(struct early_suspend *h)
 				s3cfb_set_window(fbdev, win->id, 1);
 			}
 	}
-	
-        s3cfb_set_vsync_interrupt(fbdev, 1);
+
+	s3cfb_set_vsync_interrupt(fbdev, 1);
 	s3cfb_set_global_interrupt(fbdev, 1);
-#if defined(CONFIG_FB_S3C_S6D16A0X) 
-        s6d16a0x_ldi_init();
-        s6d16a0x_ldi_enable();
-#endif
-        if (pdata->backlight_on)
+
+#ifndef CONFIG_MACH_CHIEF 
+	if (pdata->backlight_on)
 		pdata->backlight_on(pdev);
-#if !defined(CONFIG_FB_S3C_S6D16A0X)
+
 	if (pdata->reset_lcd)
 		pdata->reset_lcd(pdev);
 #endif

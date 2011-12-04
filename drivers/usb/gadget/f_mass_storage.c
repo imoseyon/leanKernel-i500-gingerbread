@@ -295,6 +295,11 @@
 
 #include "gadget_chips.h"
 
+ 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+#define _SUPPORT_MAC_   /* support to recognize CDFS on OSX (MAC PC) */
+#endif
+
 #ifdef CONFIG_USB_ANDROID_MASS_STORAGE
 #include <linux/usb/android_composite.h>
 #include <linux/platform_device.h>
@@ -315,29 +320,10 @@ static const char fsg_string_interface[] = "Mass Storage";
 #define FSG_NO_OTG               1
 #define FSG_NO_INTR_EP           1
 
-#define _SUPPORT_SAMSUNG_AUTOINSTALLER_
-#define _ENABLE_CDFS_
-//#define _SUPPORT_MAC_
-
-#define UMS_DISK_LUNS   1
-
-#ifdef _ENABLE_CDFS_
-#define UMS_CDROM_LUNS  1
-#define UMS_CDROM_ID    0
-#else
-#define UMS_CDROM_LUNS  0
-#endif
-
-
 #include "storage_common.c"
 
-struct fsg_common  *cdfs_fsg_common;
-EXPORT_SYMBOL(cdfs_fsg_common);
-/*-------------------------------------------------------------------------*/
 
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-extern bool IsKiesCurrentUsbStatus();
-#endif
+/*-------------------------------------------------------------------------*/
 
 struct fsg_dev;
 
@@ -403,15 +389,6 @@ struct fsg_common {
 	char inquiry_string[8 + 16 + 4 + 1];
 
 	struct kref		ref;
-
-	struct device 		dev;
-
-	 #ifdef _ENABLE_CDFS_
-        struct timer_list   autorun_check_timer;
-        unsigned int        autorun_check_start;
-        struct work_struct  autorun_work;
-        #endif
-
 };
 
 
@@ -463,9 +440,57 @@ struct fsg_dev {
 
 	struct usb_ep		*bulk_in;
 	struct usb_ep		*bulk_out;
-
 };
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+static int send_message(struct fsg_common *common, char *msg) {
+	char name_buf[120];
+	char state_buf[120];
+	char *envp[3];
+	int env_offset = 0;
+	struct usb_gadget * gadget = common->gadget;
+
+	DBG(common, "%s called\n", __func__);
+	printk("%s called\n", __func__);
+	printk(KERN_INFO "send_message (%s) \n", msg);
+
+	if (gadget) {
+		snprintf(name_buf, sizeof(name_buf),"SWITCH_NAME=USB_MESSAGE");
+		envp[env_offset++] = name_buf;
+
+		snprintf(state_buf, sizeof(state_buf),"SWITCH_STATE=%s", msg);
+		envp[env_offset++] = state_buf;
+
+		envp[env_offset] = NULL;
+
+		if (!gadget->dev.class) {
+			gadget->dev.class = class_create(THIS_MODULE, "usb_msg");
+			if (IS_ERR(gadget->dev.class)) 
+				return -1;
+		}
+
+		DBG(common, "Send cd eject message to daemon\n"); 
+
+		kobject_uevent_env(&gadget->dev.kobj, KOBJ_CHANGE, envp);
+	}
+
+	return 0;
+}
+
+static int do_autorun_check(struct fsg_common *common) {
+	printk("%s called \n", __func__);
+	send_message(common, "autorun");
+
+	return 0;
+}
+
+static int do_switch_atmode(struct fsg_common *common) {
+	printk("%s called \n", __func__);
+	send_message(common, "Load AT");
+
+	return 0;
+}
+#endif /* CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE */
 
 static inline int __fsg_is_set(struct fsg_common *common,
 			       const char *func, unsigned line)
@@ -654,24 +679,11 @@ static int fsg_setup(struct usb_function *f,
 		if (ctrl->bRequestType !=
 		    (USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 			break;
-		//if (w_index != fsg->interface_number || w_value != 0) //for support two LUNS in ums mode
-		if (w_value != 0)
+//		if (w_index != fsg->interface_number || w_value != 0)  - for support two Luns in ums mode
+		if (w_value != 0)		
 			return -EDOM;
 		VDBG(fsg, "get max LUN\n");
-
-		#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-                        if( IsKiesCurrentUsbStatus() )
-                        {
-                                printk("[USB:UMS] %s, CurrentUsbStatus is KIES, return to PC fsg->nluns=1\n", __FUNCTION__);
-				*(u8 *) req->buf = 0; //fsg->common->nluns - 1;
-                        }
-                        else
-		#endif
-                        {
-                                printk("[USB:UMS] %s, return to PC fsg->nluns=%d\n", __FUNCTION__, fsg->common->nluns);
-				*(u8 *) req->buf = fsg->common->nluns - 1;
-                        }
-
+		*(u8 *) req->buf = fsg->common->nluns - 1;
 
 		/* Respond with data/status */
 		req->length = min((u16)1, w_length);
@@ -756,358 +768,241 @@ static int sleep_thread(struct fsg_common *common)
 	return rc;
 }
 
-#ifdef _ENABLE_CDFS_
-#define DEBUG_CDFS(fmt,args...) printk("[CDFS](%s): " fmt, __FUNCTION__ , ##args)
-
-static void autorun_check_timer_handler(unsigned long data) {
-    struct fsg_common *fsg;
-
-    DEBUG_CDFS("AUTORUN CHECK TIMEOUT \n");
-
-    fsg = (struct fsg_common *)data;
-
-    if(fsg ==NULL)
-	DEBUG_CDFS("fsg ==NULL AUTORUN CHECK TIMEOUT \n");
-
-    schedule_work(&fsg->autorun_work);
-}
-
-static void start_autorun_check(struct fsg_common *fsg) {
-    struct timer_list *timer = &fsg->autorun_check_timer;
-
-    DEBUG_CDFS("called start_autorun_check initializing the timer (add_timer) \n");
-
-    init_timer(timer);
-    timer->expires  = jiffies + msecs_to_jiffies(30*1000);    //30s
-    timer->data     = (unsigned long)fsg;
-    timer->function = autorun_check_timer_handler;
-
-    add_timer(timer);
-
-    fsg->autorun_check_start = 1;
-    DEBUG_CDFS("called start_autorun_check autorun_check_start :%d \n",fsg->autorun_check_start);
-}
-static void stop_autorun_check(struct fsg_common *fsg) {
-    struct timer_list *timer = &fsg->autorun_check_timer;
-
-    DEBUG_CDFS("called stop_autorun_check \n");
-
-    del_timer(timer);
-
-    fsg->autorun_check_start = 0;
-    DEBUG_CDFS("called stop_autorun_check autorun_check_start :%d \n",fsg->autorun_check_start);
-}
-//EXPORT_SYMBOL(start_autorun_check);
-//EXPORT_SYMBOL(stop_autorun_check);
-
-static inline bool is_running_autorun_check(struct fsg_common *fsg) {
-    DEBUG_CDFS("called is_running_autorun_check  autorun_check_start :%d \n",fsg->autorun_check_start);
-    return fsg->autorun_check_start ? true : false;
-}
-//EXPORT_SYMBOL(is_running_autorun_check);
-
-static int do_autorun_check(struct fsg_common *fsg) {
-    DEBUG_CDFS("called \n");
-
-    if( is_running_autorun_check(fsg) ){
-	    DEBUG_CDFS("calling is_running_autorun_check from do_autorun_check \n");
-        	stop_autorun_check(fsg);
-	}
-
-    return 0;
-}
-static int send_event_cd_eject(struct fsg_common *fsg) {
-        char name_buf[120];
-        char state_buf[120];
-        char *envp[3];
-        int env_offset = 0;
-
-        struct usb_gadget *cdev = fsg->gadget;
-
-        DEBUG_CDFS(" send event cd eject called \n");
-
-        if( cdev )
-        {
-                snprintf(name_buf, sizeof(name_buf),"SWITCH_NAME=USB_MESSAGE");
-                envp[env_offset++] = name_buf;
-
-                snprintf(state_buf, sizeof(state_buf),"SWITCH_STATE=cd eject");
-                envp[env_offset++] = state_buf;
-
-                envp[env_offset] = NULL;
-
-                DEBUG_CDFS("envp[0] = %s \n", envp[0]);
-                DEBUG_CDFS("envp[1] = %s \n", envp[1]);
-
-                if (!cdev->dev.class) {
-                        cdev->dev.class = class_create(THIS_MODULE, "usb_msg");
-                        if (IS_ERR(cdev->dev.class))
-                                //return PTR_ERR(fsg->cdev->gadget->dev.class);
-                                return -1;
-		}
-
-        DEBUG_CDFS("Send cd eject message to daemon \n");
-
-                kobject_uevent_env(&cdev->dev.kobj, KOBJ_CHANGE, envp);
-   }
-}
-
-static void autorun_work(struct work_struct * autorun_work)
-{
-    DEBUG_CDFS(" autorun_work called  before container \n");
-    struct fsg_common *fsg = container_of(autorun_work, struct fsg_common, autorun_work);
-    struct fsg_lun * cdfs_lun = &fsg->luns[UMS_CDROM_ID];
-
-    DEBUG_CDFS(" autorun_work called \n");
-
-    if( !is_running_autorun_check(fsg) ){
-	    DEBUG_CDFS("calling is_running_autorun_check from autorun_work  wrong executing\n");
-        return;
-	}
-
-    fsg->autorun_check_start = 0;
-
-    DEBUG_CDFS("called autorun_work  autorun_check_start :%d \n",fsg->autorun_check_start);
-    send_event_cd_eject(fsg);
-
-        if (fsg_lun_is_open(cdfs_lun)) {
-           fsg_lun_close(cdfs_lun);
-                cdfs_lun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
-        }
-}
 #ifdef _SUPPORT_MAC_
 static void _lba_to_msf(u8 *buf, int lba)
 {
-    lba += 150;
-    buf[0] = (lba / 75) / 60;
-    buf[1] = (lba / 75) % 60;
-    buf[2] = lba % 75;
+	lba += 150;
+	buf[0] = (lba / 75) / 60;
+	buf[1] = (lba / 75) % 60;
+	buf[2] = lba % 75;
 }
-static int _read_toc_raw(struct fsg_dev *fsg, struct fsg_buffhd *bh)
+
+static int _read_toc_raw(struct fsg_common *common, struct fsg_buffhd *bh)
 {
-        struct lun      *curlun = fsg->curlun;
-        int             msf = fsg->cmnd[1] & 0x02;
-        int             start_track = fsg->cmnd[6];
-        u8              *buf = (u8 *) bh->buf;
+	struct fsg_lun	*curlun = common->curlun;
+	int		msf = common->cmnd[1] & 0x02;
+	u8		*buf = (u8 *) bh->buf;
 
-    u8 *q;
-    int len;
+	u8 *q;
+	int len;
 
-    q = buf + 2;
-    *q++ = 1; /* first session */
-    *q++ = 1; /* last session */
+	q = buf + 2;
+	*q++ = 1; /* first session */
+	*q++ = 1; /* last session */
 
- *q++ = 1; /* session number */
-    *q++ = 0x14; /* data track */
-    *q++ = 0; /* track number */
-    *q++ = 0xa0; /* lead-in */
-    *q++ = 0; /* min */
-    *q++ = 0; /* sec */
-    *q++ = 0; /* frame */
-    *q++ = 0;
-    *q++ = 1; /* first track */
-    *q++ = 0x00; /* disk type */
-    *q++ = 0x00;
+	*q++ = 1; /* session number */
+	*q++ = 0x14; /* data track */
+	*q++ = 0; /* track number */
+	*q++ = 0xa0; /* lead-in */
+	*q++ = 0; /* min */
+	*q++ = 0; /* sec */
+	*q++ = 0; /* frame */
+	*q++ = 0;
+	*q++ = 1; /* first track */
+	*q++ = 0x00; /* disk type */
+	*q++ = 0x00;
 
-    *q++ = 1; /* session number */
-    *q++ = 0x14; /* data track */
-    *q++ = 0; /* track number */
-    *q++ = 0xa1;
-    *q++ = 0; /* min */
-    *q++ = 0; /* sec */
-    *q++ = 0; /* frame */
-    *q++ = 0;
-    *q++ = 1; /* last track */
-    *q++ = 0x00;
-    *q++ = 0x00;
- *q++ = 1; /* session number */
-    *q++ = 0x14; /* data track */
-    *q++ = 0; /* track number */
-    *q++ = 0xa2; /* lead-out */
-    *q++ = 0; /* min */
-    *q++ = 0; /* sec */
-    *q++ = 0; /* frame */
-    if (msf) {
-        *q++ = 0; /* reserved */
-        _lba_to_msf(q, curlun->num_sectors);
-        q += 3;
-    } else {
-        put_be32((uint32_t *)q, curlun->num_sectors);
-        q += 4;
-    }
+	*q++ = 1; /* session number */
+	*q++ = 0x14; /* data track */
+	*q++ = 0; /* track number */
+	*q++ = 0xa1;
+	*q++ = 0; /* min */
+	*q++ = 0; /* sec */
+	*q++ = 0; /* frame */
+	*q++ = 0;
+	*q++ = 1; /* last track */
+	*q++ = 0x00;
+	*q++ = 0x00;
 
-    *q++ = 1; /* session number */
-    *q++ = 0x14; /* ADR, control */
-    *q++ = 0;    /* track number */
-    *q++ = 1;    /* point */
-    *q++ = 0; /* min */
-    *q++ = 0; /* sec */
-    *q++ = 0; /* frame */
-    if (msf) {
-        *q++ = 0;
-        _lba_to_msf(q, 0);
-        q += 3;
-    } else {
-*q++ = 0;
-        *q++ = 0;
-        *q++ = 0;
-        *q++ = 0;
-    }
+	*q++ = 1; /* session number */
+	*q++ = 0x14; /* data track */
+	*q++ = 0; /* track number */
+	*q++ = 0xa2; /* lead-out */
+	*q++ = 0; /* min */
+	*q++ = 0; /* sec */
+	*q++ = 0; /* frame */
+	if (msf) {
+		*q++ = 0; /* reserved */
+		_lba_to_msf(q, curlun->num_sectors);
+		q += 3;
+	} else {
+		put_unaligned_be32(curlun->num_sectors, q);
+		q += 4;
+	}
 
-    len = q - buf;
-    put_be16((uint16_t *)buf, len - 2);
+	*q++ = 1; /* session number */
+	*q++ = 0x14; /* ADR, control */
+	*q++ = 0;    /* track number */
+	*q++ = 1;    /* point */
+	*q++ = 0; /* min */
+	*q++ = 0; /* sec */
+	*q++ = 0; /* frame */
+	if (msf) {
+		*q++ = 0;
+		_lba_to_msf(q, 0);
+		q += 3;
+	} else {
+		*q++ = 0;
+		*q++ = 0;
+		*q++ = 0;
+		*q++ = 0;
+	}
 
-    return len;
+	len = q - buf;
+	put_unaligned_be16(len -2, buf);
+
+	return len;
 }
+
 static void cd_data_to_raw(u8 *buf, int lba)
 {
-    /* sync bytes */
-    buf[0] = 0x00;
-    memset(buf + 1, 0xff, 10);
-    buf[11] = 0x00;
-    buf += 12;
-    /* MSF */
-    _lba_to_msf(buf, lba);
-    buf[3] = 0x01; /* mode 1 data */
-    buf += 4;
-    /* data */
-    buf += 2048;
-    /* XXX: ECC not computed */
-    memset(buf, 0, 288);
+	/* sync bytes */
+	buf[0] = 0x00;
+	memset(buf + 1, 0xff, 10);
+	buf[11] = 0x00;
+	buf += 12;
+	/* MSF */
+	_lba_to_msf(buf, lba);
+	buf[3] = 0x01; /* mode 1 data */
+	buf += 4;
+	/* data */
+	buf += 2048;
+	/* XXX: ECC not computed */
+	memset(buf, 0, 288);
 }
-static int do_read_cd(struct fsg_dev *fsg)
+
+static int do_read_cd(struct fsg_common *common)
 {
-        struct lun              *curlun = fsg->curlun;
-        u32                     lba;
-        struct fsg_buffhd       *bh;
-        int                     rc;
-        u32                     amount_left;
-        loff_t                  file_offset, file_offset_tmp;
-        unsigned int            amount;
-        unsigned int            partial_page;
-        ssize_t                 nread;
+	struct fsg_lun		*curlun = common->curlun;
+	u32			lba;
+	struct fsg_buffhd	*bh;
+	int			rc;
+	u32			amount_left;
+	loff_t			file_offset, file_offset_tmp;
+	unsigned int		amount;
+	unsigned int		partial_page;
+	ssize_t			nread;
 
-    u32 nb_sectors, transfer_request;
+	u32 nb_sectors, transfer_request;
 
-    nb_sectors = (fsg->cmnd[6] << 16) | (fsg->cmnd[7] << 8) | fsg->cmnd[8];
-    lba = get_be32(&fsg->cmnd[2]);
+	nb_sectors = (common->cmnd[6] << 16) | (common->cmnd[7] << 8) | common->cmnd[8];
+	lba = get_unaligned_be32(&common->cmnd[2]);    
 
-    if( nb_sectors == 0 )
-        return 0;
+	if (nb_sectors == 0)
+		return 0;
 
-        if (lba >= curlun->num_sectors) {
-                curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
-                return -EINVAL;
-        }
-transfer_request = fsg->cmnd[9];
-    if( (transfer_request & 0xf8) == 0xf8 ) {
-        file_offset = ((loff_t) lba) << 11;
-        /* read all data  - 2352 byte */
-        amount_left = 2352;
-    } else {
-        file_offset = ((loff_t) lba) << 9;
-            /* Carry out the file reads */
-            amount_left = fsg->data_size_from_cmnd;
-    }
-        if (unlikely(amount_left == 0))
-                return -EIO;            /* No default reply */
+	if (lba >= curlun->num_sectors) {
+		curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+		return -EINVAL;
+	}
 
-        for (;;) {
+	transfer_request = common->cmnd[9];
+	if( (transfer_request & 0xf8) == 0xf8 ) {
+		file_offset = ((loff_t) lba) << 11;
+		/* read all data  - 2352 byte */        
+		amount_left = 2352;
+	} else {        
+		file_offset = ((loff_t) lba) << 9;
+		/* Carry out the file reads */
+		amount_left = common->data_size_from_cmnd;
+	}
 
-                /* Figure out how much we need to read:
-                 * Try to read the remaining amount.
-                 * But don't read more than the buffer size.
-                 * And don't try to read past the end of the file.
-                 * Finally, if we're not at a page boundary, don't read past
-                 *      the next page.
-                 * If this means reading 0 then we were asked to read past
-                 *      the end of file. */
-                amount = min((unsigned int) amount_left,
-                                (unsigned int)fsg->buf_size);
-                amount = min((loff_t) amount,
-                                curlun->file_length - file_offset);
-                partial_page = file_offset & (PAGE_CACHE_SIZE - 1);
+	if (unlikely(amount_left == 0))
+		return -EIO;		/* No default reply */
+
+	for (;;) {
+
+		/* Figure out how much we need to read:
+		 * Try to read the remaining amount.
+		 * But don't read more than the buffer size.
+		 * And don't try to read past the end of the file.
+		 * Finally, if we're not at a page boundary, don't read past
+		 *	the next page.
+		 * If this means reading 0 then we were asked to read past
+		 *	the end of file. */
+		amount = min(amount_left, FSG_BUFLEN);
+		amount = min((loff_t) amount,
+				curlun->file_length - file_offset);
+		partial_page = file_offset & (PAGE_CACHE_SIZE - 1);
 		if (partial_page > 0)
-                        amount = min(amount, (unsigned int) PAGE_CACHE_SIZE -
-                                        partial_page);
+			amount = min(amount, (unsigned int) PAGE_CACHE_SIZE -
+					partial_page);
 
-                /* Wait for the next buffer to become available */
-                bh = fsg->next_buffhd_to_fill;
-                while (bh->state != BUF_STATE_EMPTY) {
-                        rc = sleep_thread(fsg);
-                        if (rc)
-                                return rc;
-                }
+		/* Wait for the next buffer to become available */
+		bh = common->next_buffhd_to_fill;
+		while (bh->state != BUF_STATE_EMPTY) {
+			rc = sleep_thread(common);
+			if (rc)
+				return rc;
+		}
 
-                /* If we were asked to read past the end of file,
-                 * end with an empty buffer. */
-                if (amount == 0) {
-                        curlun->sense_data =
-                                        SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
-                        curlun->sense_data_info = file_offset >> 9;
-                        curlun->info_valid = 1;
-                        bh->inreq->length = 0;
-                        bh->state = BUF_STATE_FULL;
-                        break;
-                }
+		/* If we were asked to read past the end of file,
+		 * end with an empty buffer. */
+		if (amount == 0) {
+			curlun->sense_data =
+				SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+			curlun->sense_data_info = file_offset >> 9;
+			curlun->info_valid = 1;
+			bh->inreq->length = 0;
+			bh->state = BUF_STATE_FULL;
+			break;
+		}
 
- /* Perform the read */
-                file_offset_tmp = file_offset;
-        if( (transfer_request & 0xf8) == 0xf8 ) {
-                nread = vfs_read(curlun->filp,
-                                ((char __user *)bh->buf)+16,
-                                amount, &file_offset_tmp);
-        } else {
-                nread = vfs_read(curlun->filp,
-                                (char __user *)bh->buf,
-                                amount, &file_offset_tmp);
-        }
-                VLDBG(curlun, "file read %u @ %llu -> %d\n", amount,
-                                (unsigned long long) file_offset,
-                                (int) nread);
-                if (signal_pending(current))
-                        return -EINTR;
+		/* Perform the read */
+		file_offset_tmp = file_offset;
+		if( (transfer_request & 0xf8) == 0xf8 ) {
+			nread = vfs_read(curlun->filp,
+					((char __user *)bh->buf)+16,
+					amount, &file_offset_tmp);            
+		} else {
+			nread = vfs_read(curlun->filp,
+					(char __user *)bh->buf,
+					amount, &file_offset_tmp);        
+		}
+		VLDBG(curlun, "file read %u @ %llu -> %d\n", amount,
+				(unsigned long long) file_offset,
+				(int) nread);
+		if (signal_pending(current))
+			return -EINTR;
 
-                if (nread < 0) {
-                        LDBG(curlun, "error in file read: %d\n",
-                                        (int) nread);
-                        nread = 0;
-                } else if (nread < amount) {
-                        LDBG(curlun, "partial file read: %d/%u\n",
-                                        (int) nread, amount);
-                        nread -= (nread & 511); /* Round down to a block */
-                }
-                file_offset  += nread;
-                amount_left  -= nread;
-		fsg->residue -= nread;
-                bh->inreq->length = nread;
-                bh->state = BUF_STATE_FULL;
+		if (nread < 0) {
+			LDBG(curlun, "error in file read: %d\n",
+					(int) nread);
+			nread = 0;
+		} else if (nread < amount) {
+			LDBG(curlun, "partial file read: %d/%u\n",
+					(int) nread, amount);
+			nread -= (nread & 511);	/* Round down to a block */
+		}
+		file_offset  += nread;
+		amount_left  -= nread;
+		common->residue -= nread;
+		bh->inreq->length = nread;
+		bh->state = BUF_STATE_FULL;
 
-                /* If an error occurred, report it and its position */
-                if (nread < amount) {
-                        curlun->sense_data = SS_UNRECOVERED_READ_ERROR;
-                        curlun->sense_data_info = file_offset >> 9;
-                        curlun->info_valid = 1;
-                        break;
-                }
+		/* If an error occurred, report it and its position */
+		if (nread < amount) {
+			curlun->sense_data = SS_UNRECOVERED_READ_ERROR;
+			curlun->sense_data_info = file_offset >> 9;
+			curlun->info_valid = 1;
+			break;
+		}
 
-                if (amount_left == 0)
-                        break;          /* No more left to read */
+		if (amount_left == 0)
+			break;		/* No more left to read */
 
-                /* Send this buffer and go read some more */
-                start_transfer(fsg, fsg->bulk_in, bh->inreq,
-                                &bh->inreq_busy, &bh->state);
-                fsg->next_buffhd_to_fill = bh->next;
-        }
+		/* Send this buffer and go read some more */
+		START_TRANSFER_OR(common, bulk_in, bh->inreq,
+			       &bh->inreq_busy, &bh->state)
+		common->next_buffhd_to_fill = bh->next;
+	}
 
-    if( (transfer_request & 0xf8) == 0xf8 ) {
-        cd_data_to_raw(bh->buf, lba);
-    }
+	if( (transfer_request & 0xf8) == 0xf8 ) 
+		cd_data_to_raw(bh->buf, lba);
 
-        return -EIO;            /* No default reply */
+	return -EIO;		/* No default reply */
 }
 #endif /* _SUPPORT_MAC_ */
-#endif
 
 /*-------------------------------------------------------------------------*/
 
@@ -1564,10 +1459,6 @@ static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 	struct fsg_lun *curlun = common->curlun;
 	u8	*buf = (u8 *) bh->buf;
 
-	static char vendor_id[9] = "SAMSUNG ";
-        static char product_disk_id[17];
-        static char product_cdrom_id[17];
-
 	if (!curlun) {		/* Unsupported LUNs are okay */
 		common->bad_lun_okay = 1;
 		memset(buf, 0, 36);
@@ -1584,41 +1475,9 @@ static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[5] = 0;		/* No special options */
 	buf[6] = 0;
 	buf[7] = 0;
-	//memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
 
-	switch(curlun->cdrom){
+	memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
 
-	#if (UMS_CDROM_LUNS > 0)
-        	case 1: 		//UMS_CDROM_ID:
-                	strlcpy(product_cdrom_id, "UMS CD-ROM", 11);
-                	break;
-	#endif
-
-	#if defined(CONFIG_MACH_VICTORY)
-		case 0: 	//UMS_CDROM_LUNS:
-             		strlcpy(product_disk_id, "SPH-D700 Card", 14);
-                	break;
-	#else
-		#if defined(CONFIG_S5PV210_GARNETT_DELTA)
-                case 0:         //UMS_CDROM_LUNS:
-                        strlcpy(product_disk_id, "SCH-I400 Card", 14);
-                        break; 
-		#else
-		 case 0:         //UMS_CDROM_LUNS:
-                        strlcpy(product_disk_id, "SCH-I500 Card", 14);
-                        break;
-
-		#endif
-	#endif
-		default:
-                	break;
-        }
-
-#if (UMS_CDROM_LUNS > 0)
-        sprintf(buf + 8, "%-8s%-16s", vendor_id,
-                        (curlun->cdrom ? product_cdrom_id : product_disk_id));
-#endif
-	
 	return 36;
 }
 
@@ -1726,6 +1585,9 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 	int		msf = common->cmnd[1] & 0x02;
 	int		start_track = common->cmnd[6];
 	u8		*buf = (u8 *) bh->buf;
+#ifdef _SUPPORT_MAC_    
+	int     	format = (common->cmnd[9] & 0xC0) >> 6;
+#endif
 
 	if ((common->cmnd[1] & ~0x02) != 0 ||	/* Mask away MSF */
 			start_track > 1) {
@@ -1733,6 +1595,11 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 		return -EINVAL;
 	}
 
+#ifdef _SUPPORT_MAC_
+	if( format == 2 )
+		return _read_toc_raw(common, bh);
+#endif    
+	
 	memset(buf, 0, 20);
 	buf[1] = (20-2);		/* TOC data length */
 	buf[2] = 1;			/* First track number */
@@ -1789,6 +1656,10 @@ static int do_mode_sense(struct fsg_common *common, struct fsg_buffhd *bh)
 
 	/* No block descriptors */
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	/* Disabled to workaround USB reset problems with a Vista host.
+   	 */
+
 	/* The mode pages, in numerical order.  The only page we support
 	 * is the Caching page. */
 	if (page_code == 0x08 || all_pages) {
@@ -1811,6 +1682,9 @@ static int do_mode_sense(struct fsg_common *common, struct fsg_buffhd *bh)
 		}
 		buf += 12;
 	}
+#else
+	valid_page = 1;
+#endif
 
 	/* Check that a valid page was requested and the mode data length
 	 * isn't too long. */
@@ -1834,8 +1708,6 @@ static int do_start_stop(struct fsg_common *common)
 	struct fsg_lun	*curlun = common->curlun;
 	int		loej, start;
 
-	 DEBUG_CDFS(" DEBUG CDFS do_start_stop:  \n");
-
 	if (!curlun) {
 		return -EINVAL;
 	} else if (!curlun->removable) {
@@ -1845,30 +1717,49 @@ static int do_start_stop(struct fsg_common *common)
 
 	loej = common->cmnd[4] & 0x02;
 	start = common->cmnd[4] & 0x01;
-	 DEBUG_CDFS(" DEBUG CDFS do_start_stop: start:%d loej:%d \n",start,loej);
-
+        printk(" %s :loej=%d,start=%d\n",__FUNCTION__,loej,start);	
 	/* eject code from file_storage.c:do_start_stop() */
 
 	if ((common->cmnd[1] & ~0x01) != 0 ||	  /* Mask away Immed */
 		(common->cmnd[4] & ~0x03) != 0) { /* Mask LoEj, Start */
-	 DEBUG_CDFS(" DEBUG CDFS do_start_stop: checking extra code  \n");
 		curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
 		return -EINVAL;
 	}
 
-	if (loej) {     /* Simulate an unload/eject */
+	if (!start) {
+		/* Are we allowed to unload the media? */
+		if (curlun->prevent_medium_removal) {
+			LDBG(curlun, "unload attempt prevented\n");
+			curlun->sense_data = SS_MEDIUM_REMOVAL_PREVENTED;
+			return -EINVAL;
+		}
+		if (loej) {	/* Simulate an unload/eject */
+			up_read(&common->filesem);
+			down_write(&common->filesem);
+			fsg_lun_close(curlun);
+			up_write(&common->filesem);
+			down_read(&common->filesem);
 
-#ifdef _ENABLE_CDFS_
-                send_event_cd_eject(common);
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+//			send_message(common, "Load AT");
+                        send_message(common, "Load User");
 #endif
-                        up_read(&common->filesem);
-                        down_write(&common->filesem);
-                        fsg_lun_close(curlun);
-                        up_write(&common->filesem);
-                        down_read(&common->filesem);
-			curlun->sense_data = SS_MEDIUM_NOT_PRESENT;
-	}
+		}
+	} else {
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+		if(loej)
+//			send_message(common, "Load User");
+			send_message(common, "Load AT");
 
+#endif
+
+		/* Our emulation doesn't support mounting; the medium is
+		 * available for use as soon as it is loaded. */
+		if (!fsg_lun_is_open(curlun)) {
+			curlun->sense_data = SS_MEDIUM_NOT_PRESENT;
+			return -EINVAL;
+		}
+	}
 	return 0;
 }
 
@@ -2092,7 +1983,7 @@ static int finish_reply(struct fsg_common *common)
 			/* Nothing to send */
 
 		/* If there's no residue, simply send the last buffer */
-		} else if (1) { //(common->residue == 0) { //nandu
+		} else if (common->residue == 0) {
 			bh->inreq->zero = 0;
 			START_TRANSFER_OR(common, bulk_in, bh->inreq,
 					  &bh->inreq_busy, &bh->state)
@@ -2462,9 +2353,8 @@ static int do_scsi_command(struct fsg_common *common)
 		break;
 
 	case SC_READ_HEADER:
-#if (UMS_CDROM_LUNS > 0)
-                if (common->curlun->cdrom == UMS_CDROM_ID) goto unknown_cmnd;
-#endif
+		if (!common->curlun || !common->curlun->cdrom)
+			goto unknown_cmnd;
 		common->data_size_from_cmnd =
 			get_unaligned_be16(&common->cmnd[7]);
 		reply = check_command(common, 10, DATA_DIR_TO_HOST,
@@ -2475,13 +2365,16 @@ static int do_scsi_command(struct fsg_common *common)
 		break;
 
 	case SC_READ_TOC:
-#if (UMS_CDROM_LUNS > 0)
-                if (common->curlun->cdrom == UMS_CDROM_ID) goto unknown_cmnd;
-#endif
+		if (!common->curlun || !common->curlun->cdrom)
+			goto unknown_cmnd;
 		common->data_size_from_cmnd =
 			get_unaligned_be16(&common->cmnd[7]);
 		reply = check_command(common, 10, DATA_DIR_TO_HOST,
+#ifdef _SUPPORT_MAC_
+				      (0xf<<6) | (1<<1), 1,
+#else				      
 				      (7<<6) | (1<<1), 1,
+#endif				      
 				      "READ TOC");
 		if (reply == 0)
 			reply = do_read_toc(common, bh);
@@ -2572,29 +2465,38 @@ static int do_scsi_command(struct fsg_common *common)
 			reply = do_write(common);
 		break;
 
-#ifdef _ENABLE_CDFS_
-        case SC_AUTORUN_CHECK0:
-        case SC_AUTORUN_CHECK1:
-                reply = do_autorun_check(common);
-                break;
-        #ifdef _SUPPORT_MAC_
-        case SC_READ_CD:
-                fsg->data_size_from_cmnd = ((fsg->cmnd[6] << 16) | (fsg->cmnd[7] << 8) | (fsg->cmnd[8])) << 9;
-                if ((reply = check_command(fsg, 12, DATA_DIR_TO_HOST,
-                                (0xf<<2) | (7<<7), 1,
-                                "READ CD")) == 0)
-                        reply = do_read_cd(fsg);
-                break;
-        #endif
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	case SC_RELEASE:	/* SC_AUTORUN_CHECK0 : 0x17 */
+        	reply = do_switch_atmode(common);
+		break;
+
+	case SC_RESERVE:	/* SC_AUTORUN_CHECK1 : 0x16 */
+		reply = do_autorun_check(common);
+		break;
+
+#ifdef _SUPPORT_MAC_
+	case SC_READ_CD:        
+		common->data_size_from_cmnd = ((common->cmnd[6] << 16) 
+						| (common->cmnd[7] << 8) 
+						| (common->cmnd[8])) << 9;
+		reply = check_command(common, 12, DATA_DIR_TO_HOST,
+					(0xf<<2) | (7<<7), 1,
+					"READ CD");
+		if (reply == 0)
+			reply = do_read_cd(common);
+		break;        
+
+#endif /* _SUPPORT_MAC_ */        
 #endif
+
 	/* Some mandatory commands that we recognize but don't implement.
 	 * They don't mean much in this setting.  It's left as an exercise
 	 * for anyone interested to implement RESERVE and RELEASE in terms
 	 * of Posix locks. */
 	case SC_FORMAT_UNIT:
-#ifndef _ENABLE_CDFS_        
-        case SC_RELEASE:
-        case SC_RESERVE:
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	case SC_RELEASE:
+	case SC_RESERVE:
 #endif
 	case SC_SEND_DIAGNOSTIC:
 		/* Fall through */
@@ -3089,75 +2991,6 @@ static int fsg_main_thread(void *common_)
 
 /*************************** DEVICE ATTRIBUTES ***************************/
 
-static ssize_t fsg_store_file(struct device *dev, struct device_attribute *attr,
-                              const char *buf, size_t count)
-{
-        struct fsg_lun  *curlun = fsg_lun_from_dev(dev);
-        struct rw_semaphore     *filesem = dev_get_drvdata(dev);
-        struct fsg_common  *fsg = (struct fsg_common *) cdfs_fsg_common ;//container_of(dev, struct fsg_common, dev);  // dev_get_drvdata(dev);
-        int             rc = 0;
-
-
-
-#ifndef CONFIG_USB_ANDROID_MASS_STORAGE
-        /* disabled in android because we need to allow closing the backing file
-         * if the media was removed
-         */
-        if (curlun->prevent_medium_removal && fsg_lun_is_open(curlun)) {
-                LDBG(curlun, "eject attempt prevented\n");
-                return -EBUSY;                          /* "Door is locked" */
-        }
-#endif
-      /* Remove a trailing newline */
-        if (count > 0 && buf[count-1] == '\n')
-                ((char *) buf)[count-1] = 0;            /* Ugh! */
-
-        /* Eject current medium */
-        down_write(filesem);
-        if (fsg_lun_is_open(curlun)) {
-                fsg_lun_close(curlun);
-                curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
-        }
-
-        /* Load new medium */
-        if (count > 0 && buf[0]) {
-                rc = fsg_lun_open(curlun, buf);
-                if (rc == 0)
-                        curlun->unit_attention_data =
-                                        SS_NOT_READY_TO_READY_TRANSITION;
-        }
-
-#ifdef _ENABLE_CDFS_
-
-        if( fsg == NULL){
-        DEBUG_CDFS(" DEBUG CDFS fsc_common is NULL \n");
-        return -ENODEV ;
-        }
-
-	DEBUG_CDFS("[ lun:%d] buf(%s), count(%d) \n", curlun->cdrom, buf, count);
-        if( (curlun->cdrom == 1) && buf[0] ) {
-                if( strcmp(buf, "0")==0 ) {
-		DEBUG_CDFS(" stop autorun check echo > 0 \n", curlun->cdrom, buf, count);
-                /* EJECT - echo 0  > /sys/devices/platform/s3c-usbgadget/gadget/lun0/file */
-                        if( is_running_autorun_check(fsg) )
-                                stop_autorun_check(fsg);
-        } else {
-        DEBUG_CDFS(" DEBUG CDFS fsg_store file calling stop_autorun_check \n");
-            /* INSERT - If file open is success, start autorun check timer */
-            if( curlun->unit_attention_data == SS_NOT_READY_TO_READY_TRANSITION ) {
-                if( is_running_autorun_check(fsg) )
-                    stop_autorun_check(fsg);
-
-                start_autorun_check(fsg);
-            }
-        }
-    }
-#endif
-
-        up_write(filesem);
-        return (rc < 0 ? rc : count);
-}
-
 /* Write permission is checked per LUN in store_*() functions. */
 static DEVICE_ATTR(ro, 0644, fsg_show_ro, fsg_store_ro);
 static DEVICE_ATTR(file, 0644, fsg_show_file, fsg_store_file);
@@ -3212,12 +3045,6 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		common->free_storage_on_release = 0;
 	}
 
-	cdfs_fsg_common = (struct fsg_common *) common;
-
-#ifdef _ENABLE_CDFS_
-        INIT_WORK(&common->autorun_work, autorun_work);
-#endif
-
 	common->private_data = cfg->private_data;
 
 	common->gadget = gadget;
@@ -3251,6 +3078,8 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		curlun->dev.release = fsg_lun_release;
 
 #ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+		curlun->initially_ro = lcfg->cdrom || lcfg->ro;
+
 		/* use "usb_mass_storage" platform device as parent */
 		curlun->dev.parent = &cfg->pdev->dev;
 #else
@@ -3330,7 +3159,6 @@ buffhds_first_it:
 				     ? "File-Stor Gadget"
 				     : "File-CD Gadget  "),
 		 i);
-
 
 	/* Some peripheral controllers are known not to be able to
 	 * halt bulk endpoints correctly.  If one of them is present,
@@ -3677,19 +3505,29 @@ static int fsg_probe(struct platform_device *pdev)
 	if (nluns > FSG_MAX_LUNS)
 		nluns = FSG_MAX_LUNS;
 	fsg_cfg.nluns = nluns;
-	for (i = 0; i < nluns; i++){
-		 #if !defined(CONFIG_MACH_VICTORY)
-		if(i==0)
-		fsg_cfg.luns[i].cdrom = 1;
-		#endif
+	for (i = 0; i < nluns; i++)
 		fsg_cfg.luns[i].removable = 1;
-	}
 
 	fsg_cfg.vendor_name = pdata->vendor;
 	fsg_cfg.product_name = pdata->product;
 	fsg_cfg.release = pdata->release;
 	fsg_cfg.can_stall = 0;
 	fsg_cfg.pdev = pdev;
+
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	for (i = 0; i < nluns; i++) {		
+		struct usb_mass_storage_lun_data *plun;
+
+		if (pdata->luns) {
+			plun = &pdata->luns[i];
+
+			fsg_cfg.luns[i].filename = plun->filename;
+			fsg_cfg.luns[i].ro = plun->ro;
+			fsg_cfg.luns[i].removable = plun->removable;
+			fsg_cfg.luns[i].cdrom = plun->cdrom;
+		}
+	}
+#endif	
 
 	return 0;
 }

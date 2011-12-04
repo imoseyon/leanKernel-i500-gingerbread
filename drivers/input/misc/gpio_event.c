@@ -20,14 +20,6 @@
 #include <linux/hrtimer.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <mach/regs-gpio.h>
-#include <mach/gpio.h>
-#include <plat/gpio-cfg.h>
-
-#ifdef CONFIG_S5PV210_GARNETT_DELTA 
-extern void keypad_resume();
-extern void keypad_suspend();
-#endif
 
 struct gpio_event {
 	struct gpio_event_input_devs *input_devs;
@@ -35,44 +27,6 @@ struct gpio_event {
 	struct early_suspend early_suspend;
 	void *state[0];
 };
-
-static ssize_t keyshort_test(struct device *dev, struct device_attribute *attr, char *buf)
-{
-        int count;
-        int mask=0;
-        u32 col=0,cval=0,rval=0;
-
-        if(!gpio_get_value(S5PV210_GPH2(6)))//Power Key
-        {
-         	mask |= 0x1;
-        }
-
-        if(!gpio_get_value(S5PV210_GPH3(3)))//Volume Up
-        {
-	         mask |= 0x10;
-        }
-
-        if(!gpio_get_value(S5PV210_GPH3(1)) )  //volume down
-        {
-        	 mask |= 0x100;
-        }
-
-
-	if(mask)  /*!gpio_get_value(GPIO_KBR0) || !gpio_get_value(GPIO_KBR1) || !gpio_get_value(GPIO_KBR2) || */
-        {
-                count = sprintf(buf,"PRESS\n");
-              printk("keyshort_test: PRESS\n",mask);
-        }
-        else
-        {
-                count = sprintf(buf,"RELEASE\n");
-              printk("keyshort_test: RELEASE \n");
-        }
-
-        return count;
-}
-static DEVICE_ATTR(key_pressed, 0664, keyshort_test, NULL);
-
 
 static int gpio_input_event(
 	struct input_dev *dev, unsigned int type, unsigned int code, int value)
@@ -238,13 +192,6 @@ static int gpio_event_probe(struct platform_device *pdev)
 		}
 		registered++;
 	}
-         
-        if (device_create_file(&pdev->dev, &dev_attr_key_pressed) < 0)
-        {
-                printk("%s s3c_keypad_probe\n",__FUNCTION__);
-                pr_err("Failed to create device file(%s)!\n", dev_attr_key_pressed.attr.name);
-        }
-
 
 	return 0;
 
@@ -287,27 +234,9 @@ static int gpio_event_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-static int s3c_keypad_suspend(struct platform_device *dev, pm_message_t state)
-{
-	keypad_suspend();
-	return 0;
-}
-
-static int s3c_keypad_resume(struct platform_device *dev)
-{
-	keypad_resume();
-	return 0;
-}
-#endif
-
 static struct platform_driver gpio_event_driver = {
 	.probe		= gpio_event_probe,
 	.remove		= gpio_event_remove,
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-	.suspend	= s3c_keypad_suspend,
-	.resume		= s3c_keypad_resume,
-#endif
 	.driver		= {
 		.name	= GPIO_EVENT_DEV_NAME,
 	},

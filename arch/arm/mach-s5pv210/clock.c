@@ -656,6 +656,12 @@ static struct clk init_clocks[] = {
 		.enable		= s5pv210_clk_ip3_ctrl,
 		.ctrlbit	= S5P_CLKGATE_IP3_I2S0 | S5P_CLKGATE_IP3_PCM0,
 	}, {
+		.name		= "modem",
+		.id		= -1,
+		.parent		= &clk_hclk_psys.clk,
+		.enable		= s5pv210_clk_ip2_ctrl,
+		.ctrlbit	= (1 << 9),
+	}, {
 		.name		= "clk_out",
 		.id		= -1,
 		.ops		= &s5pc11x_clkout_ops,

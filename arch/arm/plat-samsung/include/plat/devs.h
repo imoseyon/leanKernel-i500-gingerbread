@@ -119,20 +119,28 @@ extern struct platform_device s3c_device_usb_mass_storage;
 #      define SAMSUNG_RNDIS_PRODUCT_ID	0x6863  /* RNDIS only */
 #    endif
 #  else /* USE MCCI HOST DRIVER */
-#    define SAMSUNG_KIES_PRODUCT_ID	0x6877	/* Shrewbury ACM+MTP*/
-#    define SAMSUNG_DEBUG_PRODUCT_ID	0x681C	/* Shrewbury ACM+UMS+ADB*/
+#    define SAMSUNG_KIES_PRODUCT_ID	0x6877	/* Shrewbury ACM+MTP */
+#ifdef CONFIG_USB_ANDROID_DIAG
+	#define SAMSUNG_DEBUG_PRODUCT_ID    0x689E  /* Shrewbury ACM+DM+UMS+ADB */
+#else
+	#define SAMSUNG_DEBUG_PRODUCT_ID	0x681C	/* Shrewbury ACM+UMS+ADB */
+#endif
 #    define SAMSUNG_UMS_PRODUCT_ID	0x681D
-#   if defined(CONFIG_MACH_ATLAS) || defined(CONFIG_MACH_FORTE)
-#    define SAMSUNG_MTP_PRODUCT_ID	0x5A0F  /* MTP Only */ /* match mtp usb product id to Atlas Froyo for VZW */
-#   else
-#    define SAMSUNG_MTP_PRODUCT_ID	0x68A9
-#   endif
-#    define SAMSUNG_RNDIS_PRODUCT_ID	0x6881
+#    define SAMSUNG_MTP_PRODUCT_ID	0x5A0F
+#ifdef CONFIG_USB_ANDROID_DIAG
+	#define SAMSUNG_RNDIS_PRODUCT_ID	0x68C8  /* Shrewbury RNDIS+DM */
+#else
+	#define SAMSUNG_RNDIS_PRODUCT_ID	0x6881
+#endif
 #  endif
 #  define       ANDROID_DEBUG_CONFIG_STRING	 "ACM + UMS + ADB (Debugging mode)"
 #  define       ANDROID_KIES_CONFIG_STRING	 "ACM + MTP (SAMSUNG KIES mode)"
 #  define       ANDROID_UMS_CONFIG_STRING	 "UMS Only (Not debugging mode)"
 #  define       ANDROID_MTP_CONFIG_STRING	 "MTP Only (Not debugging mode)"
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#  define       ANDORID_ACCESSORY_CONFIG_STRING "Google Accessory mode"
+#  define       ANDORID_ACCESSORY_ADB_CONFIG_STRING "Google Accessory debugging mode"
+#endif
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_RNDIS_WITH_MS_COMPOSITE
 #    define       ANDROID_RNDIS_CONFIG_STRING	 "RNDIS + UMS (Not debugging mode)"
 #  else
@@ -148,6 +156,10 @@ extern struct platform_device s3c_device_usb_mass_storage;
 #  define USBSTATUS_DM				0x20
 #  define USBSTATUS_ACM				0x40
 #  define USBSTATUS_SAMSUNG_KIES_REAL		0x80
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#  define USBSTATUS_ACCESSORY    0x100
+#  define USBSTATUS_ACCESSORY_ADB    0x200
+#endif
 
 /* soonyong.cho : This is for setting unique serial number */
 void __init s3c_usb_set_serial(void);
@@ -158,6 +170,8 @@ extern struct platform_device s3c_device_usb_hsotg;
 
 extern struct platform_device s5p_device_rotator;
 extern struct platform_device s5p_device_tvout;
+extern struct platform_device s5p_device_cec;
+extern struct platform_device s5p_device_hpd;
 extern struct platform_device s5p_device_g3d;
 
 extern struct platform_device s5pv210_device_ac97;

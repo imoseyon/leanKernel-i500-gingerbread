@@ -28,8 +28,6 @@
 #include "s3c-pcmdev.h"
 /* #define CONFIG_SND_DEBUG */
 
-#define USE_INFINIEON_EC_FOR_VT
-
 #ifdef CONFIG_SND_DEBUG
 #define debug_msg(x...) printk(x)
 #else
@@ -38,7 +36,7 @@
 
 
 #if defined USE_INFINIEON_EC_FOR_VT
-static unsigned char vtcallActive ;
+static unsigned char vtcall_active ;
 #endif
 
 
@@ -325,7 +323,7 @@ static int s3c_pcmdev_startup(struct snd_pcm_substream *substream,
 	debug_msg("%s\n", __func__);
 
 #if defined USE_INFINIEON_EC_FOR_VT
-	if (vtcallActive == 1) {
+	if (vtcall_active == 1) {
 
 		debug_msg("%s : clock is already setup!!", __func__);
 		return 0;
@@ -336,7 +334,6 @@ static int s3c_pcmdev_startup(struct snd_pcm_substream *substream,
 
 			clk_enable(s3c_pcmdev.clk_src);
 			clk_enable(s3c_pcmdev.pcm_clk);
-			pr_info("%s: enable pcm clk\n", __func__);
 			if (value_saved == true) {
 				writel(s3c_pcmdev.pcmctl,
 					s3c_pcmdev.regs + S3C_PCM_CTL);
@@ -370,7 +367,7 @@ static void s3c_pcmdev_shutdown(struct snd_pcm_substream *substream,
 	u32 value;
 
 #if defined USE_INFINIEON_EC_FOR_VT
-	if (vtcallActive == 1) {
+	if (vtcall_active == 1) {
 
 		debug_msg("%s : vtcall is using!!", __func__);
 		return;
@@ -399,7 +396,7 @@ static void s3c_pcmdev_shutdown(struct snd_pcm_substream *substream,
 		value_saved = true;
 		clk_disable(s3c_pcmdev.pcm_clk);
 		clk_disable(s3c_pcmdev.clk_src);
-		pr_info("%s: Disabled pcm clocks finally\n", __func__);
+		debug_msg("Disabled pcm clocks finally\n");
 	}
 }
 static int s3c_pcmdev_prepare(struct snd_pcm_substream *substream,
@@ -497,7 +494,7 @@ static irqreturn_t s3c_pcmdev_irq(int irqno, void *dev_id)
 #if defined USE_INFINIEON_EC_FOR_VT
 int s3c_pcmdev_clock_control(int enable)
 {
-	vtcallActive = enable;
+	vtcall_active = enable;
 	return 0;
 }
 #endif
@@ -619,7 +616,6 @@ static int s3c_pcmdev_suspend(struct snd_soc_dai *dai)
 
 		clk_disable(s3c_pcmdev.pcm_clk);
 		clk_disable(s3c_pcmdev.clk_src);
-		pr_info("%s: disable pcm clk\n", __func__);
 	}
 	debug_msg("%s-done\n", __func__);
 #endif
@@ -634,7 +630,6 @@ static int s3c_pcmdev_resume(struct snd_soc_dai *dai)
 
 		clk_enable(s3c_pcmdev.pcm_clk);
 		clk_enable(s3c_pcmdev.clk_src);
-		pr_info("%s: enable pcm clk\n", __func__);
 	}
 
 	writel(s3c_pcmdev.pcmctl, s3c_pcmdev.regs + S3C_PCM_CTL);

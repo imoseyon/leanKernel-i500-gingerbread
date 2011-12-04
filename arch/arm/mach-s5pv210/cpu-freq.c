@@ -351,12 +351,12 @@ void s5pv210_lock_dvfs_high_level(uint nToken, uint perf_level)
 	//mutex_unlock(&dvfs_high_lock);
 
 	policy = cpufreq_cpu_get(0);
-        if (policy == NULL)
-                return;
+	if (policy == NULL)
+		return;
 
 	freq_level = freq_table[perf_level].frequency;
 
-        cpufreq_driver_target(policy, freq_level, CPUFREQ_RELATION_L);
+	cpufreq_driver_target(policy, freq_level, CPUFREQ_RELATION_L);
 }
 EXPORT_SYMBOL(s5pv210_lock_dvfs_high_level);
 
@@ -377,10 +377,10 @@ void s5pv210_unlock_dvfs_high_level(unsigned int nToken)
 		}
 	}
 
-	 printk(KERN_DEBUG "%s : unlock with token(%d) current(%X) level(%d)\n",
-                        __func__, nToken, g_dvfs_high_lock_token, g_dvfs_high_lock_limit);
-
 	//mutex_unlock(&dvfs_high_lock);
+
+	printk(KERN_DEBUG "%s : unlock with token(%d) current(%X) level(%d)\n",
+			__func__, nToken, g_dvfs_high_lock_token, g_dvfs_high_lock_limit);
 }
 EXPORT_SYMBOL(s5pv210_unlock_dvfs_high_level);
 #endif
@@ -440,11 +440,12 @@ static int s5pv210_cpufreq_target(struct cpufreq_policy *policy,
 	}
 
 #ifdef CONFIG_DVFS_LIMIT
-        if (g_dvfs_high_lock_token) {
-                if (index > g_dvfs_high_lock_limit)
-                        index = g_dvfs_high_lock_limit;
-        }
+	if (g_dvfs_high_lock_token) {
+		if (index > g_dvfs_high_lock_limit)
+			index = g_dvfs_high_lock_limit;
+	}
 #endif
+
 	arm_clk = freq_table[index].frequency;
 
 	s3c_freqs.freqs.new = arm_clk;
@@ -469,11 +470,11 @@ static int s5pv210_cpufreq_target(struct cpufreq_policy *policy,
 		if (!IS_ERR_OR_NULL(arm_regulator) &&
 				!IS_ERR_OR_NULL(internal_regulator)) {
 			ret = regulator_set_voltage(arm_regulator,
-					arm_volt, arm_volt_max);
+						    arm_volt, arm_volt_max);
 			if (ret)
 				goto out;
 			ret = regulator_set_voltage(internal_regulator,
-					int_volt, int_volt_max);
+						    int_volt, int_volt_max);
 			if (ret)
 				goto out;
 		}
@@ -758,8 +759,8 @@ static int __init s5pv210_cpufreq_driver_init(struct cpufreq_policy *policy)
 	previous_arm_volt = dvs_conf[level].arm_volt;
 
 #ifdef CONFIG_DVFS_LIMIT
-        for(i = 0; i < DVFS_LOCK_TOKEN_NUM; i++)
-                g_dvfslockval[i] = MAX_PERF_LEVEL;
+	for(i = 0; i < DVFS_LOCK_TOKEN_NUM; i++)
+		g_dvfslockval[i] = MAX_PERF_LEVEL;
 #endif
 
 	return cpufreq_frequency_table_cpuinfo(policy, freq_table);
@@ -811,11 +812,17 @@ static int __init s5pv210_cpufreq_init(void)
 		pr_err("failed to get regulater resource vddarm\n");
 		goto error;
 	}
+	if (regulator_is_enabled(arm_regulator))
+		regulator_disable(arm_regulator);
+
 	internal_regulator = regulator_get_exclusive(NULL, "vddint");
 	if (IS_ERR(internal_regulator)) {
 		pr_err("failed to get regulater resource vddint\n");
 		goto error;
 	}
+	if (regulator_is_enabled(internal_regulator))
+		regulator_disable(internal_regulator);
+
 	goto finish;
 error:
 	pr_warn("Cannot get vddarm or vddint. CPUFREQ Will not"

@@ -39,10 +39,6 @@ config SND_S3C64XX_SOC_I2S_V4
 	select SND_S3C_I2SV2_SOC
 	select S3C64XX_DMA
 
-config SND_C110_PCM
-	tristate "PCM-wm8994 device"
-	select SND_S3C_SOC_PCM
-
 config SND_S3C_SOC_AC97
 	tristate
 	select SND_SOC_AC97_BUS
@@ -105,14 +101,6 @@ config  S5P_INTERNAL_DMA
 	help
 	  Say Y for IIS to operate with Internal DMA(IIS's own DMA)
 	 
-config 	ANDROID_BUF_NUM
-	int "Multiplication unit for Additional buffers"
-	depends on SND_S5P_WM8994
-	default "1"
-	help
-	  Set it to 1 till  Additional buffer logic gets implemented
-	  in PCM library.
-
 config SND_C110_PCM
 	tristate "PCM-wm8994 device"
 	depends on SND_S5P_WM8994

@@ -49,8 +49,12 @@ obj-$(CONFIG_TOUCHSCREEN_WM97XX_MAINSTONE)	+= mainstone-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_WM97XX_ZYLONITE)	+= zylonite-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_W90X900)	+= w90p910_ts.o
 obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
-ifeq ($(CONFIG_MACH_FORTE),y)
-obj-$(CONFIG_TOUCHSCREEN_QT602240)      += qt602240_forte.o
-else
 obj-$(CONFIG_TOUCHSCREEN_QT602240)      += qt602240.o
-endif
+obj-$(CONFIG_TOUCHSCREEN_AEGIS_TSP)      += aegis_tsp_temp.o
+obj-$(CONFIG_TOUCHSCREEN_VIPER_TSP)      += viper_tsp_temp.o
+obj-$(CONFIG_TOUCHSCREEN_VIPER_TSP)      += chief_tsp_temp.o
+obj-$(CONFIG_TOUCHSCREEN_MELFAS_TS)      += melfas_ts.o
+obj-$(CONFIG_TOUCHSCREEN_MELFAS_TS)      += mcs8000_download.o
+obj-$(CONFIG_TOUCHSCREEN_MELFAS)     += melfas_mcs7032_ts.o
+obj-$(CONFIG_TOUCHSCREEN_MELFAS)     += melfas_download.o
+

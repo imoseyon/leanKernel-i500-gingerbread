@@ -18,11 +18,6 @@
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <mach/regs-gpio.h>
-#include <mach/gpio-aries.h>
-#include <linux/gpio.h>
-
-#include <mach/gpio-bank.h>
 
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
@@ -308,9 +303,6 @@ irqreturn_t sdhci_irq_cd(int irq, void *dev_id)
 
 	detect = sc->pdata->detect_ext_cd();
 
-	if (sc->host->mmc)
-		sc->host->mmc->rescan_disable = 0;
-	
 	if (detect) {
 		printk(KERN_DEBUG "sdhci: card inserted.\n");
 		sc->host->flags |= SDHCI_DEVICE_ALIVE;
@@ -574,17 +566,9 @@ static int sdhci_s3c_resume(struct platform_device *dev)
 	struct s3c_sdhci_platdata *pdata = dev->dev.platform_data;
 	int ret;
 
-#if 0
-	if (dev->id == 0) {
-        	/*  control power of moviNAND. */
-        	gpio_set_value(GPIO_MASSMEMORY_EN, 1);
-	}
-#endif
-
 	sdhci_resume_host(host);
 
 	if(pdata && pdata->cfg_ext_cd){
-		host->mmc->rescan_disable = 0;
 		ret = request_irq(pdata->ext_cd, sdhci_irq_cd, IRQF_SHARED, mmc_hostname(host->mmc), sdhci_priv(host));
 		if(ret)
 			return ret;

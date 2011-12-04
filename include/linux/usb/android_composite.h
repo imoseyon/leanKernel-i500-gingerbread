@@ -27,6 +27,10 @@ struct android_usb_function {
 };
 
 struct android_usb_product {
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	/* Default vender ID. */
+	__u16 vendor_id;
+#endif
 	/* Default product ID. */
 	__u16 product_id;
 
@@ -78,6 +82,16 @@ struct android_usb_platform_data {
 	char **functions;
 };
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+/* lun data for "usb_mass_storage" driver */
+struct usb_mass_storage_lun_data {
+	const char *filename;
+	char ro;
+	char removable;
+	char cdrom;
+};
+#endif
+
 /* Platform data for "usb_mass_storage" driver. */
 struct usb_mass_storage_platform_data {
 	/* Contains values for the SC_INQUIRY SCSI command. */
@@ -87,6 +101,10 @@ struct usb_mass_storage_platform_data {
 
 	/* number of LUNS */
 	int nluns;
+
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	struct usb_mass_storage_lun_data *luns;
+#endif
 };
 
 /* Platform data for USB ethernet driver. */

@@ -32,13 +32,13 @@ struct fsa9480_platform_data {
 	void (*usb_cb) (bool attached);
 	void (*uart_cb) (bool attached);
 	void (*charger_cb) (bool attached);
+	void (*usb_charger_cb) (bool attached);
 	void (*jig_cb) (bool attached);
 	void (*deskdock_cb) (bool attached);
 	void (*cardock_cb) (bool attached);
 	void (*reset_cb) (void);
 	void (*set_init_flag) (void);
-	int spk_switch;
-	void (*wimax_cb) (bool attached);
+	void (*key_cb) (unsigned int index, bool press);
 };
 
 enum {
@@ -46,7 +46,8 @@ enum {
 	SWITCH_PORT_USB,
 	SWITCH_PORT_AUDIO,
 	SWITCH_PORT_UART,
-	SWITCH_PORT_VAUDIO
+	SWITCH_PORT_VAUDIO,
+	SWITCH_PORT_OPEN
 };
 
 extern void fsa9480_manual_switching(int path);

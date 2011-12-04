@@ -92,12 +92,12 @@
 
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 /*#define CSY_SAMSUNG_COMMAND_LOG */
-/*#define CSY_SAMSUNG_NO_IAD */
+#define CSY_SAMSUNG_NO_IAD
 
 /* soonyong.cho : For using RNDIS interface 0, 1.
  *		  If RNDIS uses another interface number, host driver will have some problem.
  */
-#  define CSY_SAMSUNG_FIX_IAD_INTERFACE_NUMBER 	
+#  define CSY_SAMSUNG_FIX_IAD_INTERFACE_NUMBER
 
 #endif
 
@@ -374,6 +374,23 @@ static struct usb_ether_platform_data *rndis_pdata;
 
 /*-------------------------------------------------------------------------*/
 
+static u32 lastMsgType;
+static u32 curMsgType;
+
+static inline void rndis_get_command(void *buf, u32 *type)
+{
+	__le32 *tmp;
+
+	if (buf == NULL) {
+		pr_debug("[RNDIS] %s: buf is NULL\n", __func__);
+		return;
+	}
+
+	tmp = (__le32 *) buf;
+
+	*type = ~(1U << 31) & get_unaligned_le32(tmp++); 
+}
+
 static struct sk_buff *rndis_add_header(struct gether *port,
 					struct sk_buff *skb)
 {
@@ -419,7 +436,9 @@ static void rndis_response_complete(struct usb_ep *ep, struct usb_request *req)
 	struct usb_composite_dev	*cdev = rndis->port.func.config->cdev;
 	int				status = req->status;
 
+#ifdef CSY_DBG
 	CSY_DBG("rndis_response_complete req->length=0x%x\n", req->length);
+#endif
 	/* after TX:
 	 *  - USB_CDC_GET_ENCAPSULATED_RESPONSE (ep0/control)
 	 *  - RNDIS_RESPONSE_AVAILABLE (status/irq)
@@ -459,6 +478,8 @@ static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 	struct usb_composite_dev	*cdev = rndis->port.func.config->cdev;
 	int				status;
 
+	rndis_get_command(req->buf, &lastMsgType);
+
 	/* received RNDIS command from USB_CDC_SEND_ENCAPSULATED_COMMAND */
 //	spin_lock(&dev->lock);
 #ifdef CSY_SAMSUNG_COMMAND_LOG
@@ -474,10 +495,27 @@ static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 	if (status < 0)
 		ERROR(cdev, "RNDIS command error %d, %d/%d\n",
 			status, req->actual, req->length);
-
+#ifdef CSY_DBG
 	CSY_DBG("rndis_command_complete req->length=0x%x\n", req->length);
+#endif
 //	spin_unlock(&dev->lock);
 }
+
+static void rndis_command_queue(struct usb_ep *ep0, struct usb_request *req, u16 w_length, int value)
+{
+	/* respond with data transfer or status phase? */
+	if (value >= 0) {
+		req->zero = (value < w_length);
+		req->length = value;
+		value = usb_ep_queue(ep0, req, GFP_ATOMIC);
+		if (value < 0)
+			pr_debug("[RNDIS] %s: rndis response on err %d\n", __func__, value);
+	}
+	else {
+		pr_debug("[RNDIS] %s: value is under zero!!~~\n", __func__);
+	}
+}
+
 
 static int
 rndis_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
@@ -495,14 +533,6 @@ rndis_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	CSY_DBG("bRequestType=0x%x, ctrl->bRequest=0x%x, req->length=%d w_length=%d,rndis->ctrl_id=%d,w_index=%d\n", rt, ctrl->bRequest, req->length,w_length, rndis->ctrl_id, w_index);
 #endif
 
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : if you use composite framework and RNDIS is not first in all function list,
-                  you have to change w_index number. And please use RNDIS only if you possible.
- */
-	if (w_index == 0)
-		w_index = rndis->ctrl_id;
-
-#endif
 	/* composite driver infrastructure handles everything except
 	 * CDC class messages; interface activation uses set_alt().
 	 */
@@ -513,7 +543,9 @@ rndis_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	 */
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8)
 			| USB_CDC_SEND_ENCAPSULATED_COMMAND:
+#ifdef CSY_DBG
 		CSY_DBG("USB_CDC_SEND_ENCAPSULATED_COMMAND++\n");
+#endif
 		if (w_length > req->length || w_value
 				|| w_index != rndis->ctrl_id)
 			goto invalid;
@@ -521,28 +553,69 @@ rndis_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		value = w_length;
 		req->complete = rndis_command_complete;
 		req->context = rndis;
+#ifdef CSY_DBG
 		CSY_DBG("USB_CDC_SEND_ENCAPSULATED_COMMAND--\n");
+#endif
 		/* later, rndis_response_available() sends a notification */
+		rndis_command_queue(cdev->gadget->ep0, req, w_length, value);
 		break;
 
 	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8)
 			| USB_CDC_GET_ENCAPSULATED_RESPONSE:
+#ifdef CSY_DBG
 		CSY_DBG("USB_CDC_GET_ENCAPSULATED_COMMAND++\n");
+#endif
 		if (w_value || w_index != rndis->ctrl_id)
 			goto invalid;
 		else {
 			u8 *buf;
 			u32 n;
 
-			/* return the result */
-			buf = rndis_get_next_response(rndis->config, &n);
-			if (buf) {
-				memcpy(req->buf, buf, n);
-				req->complete = rndis_response_complete;
-				rndis_free_response(rndis->config, buf);
-				value = n;
+			if(lastMsgType == REMOTE_NDIS_RESET_MSG) {
+				pr_debug("[RNDIS] received REMOTE_NDIS_RESET_MSG...\n");
+				while(buf = rndis_get_next_response(rndis->config, &n)) {
+					rndis_get_command(buf, &curMsgType);
+					if(curMsgType == REMOTE_NDIS_RESET_MSG) {
+						pr_debug("[RNDIS] found REMOTE_NDIS_RESET_MSG from reponseQ\n");
+						memcpy(req->buf, buf, n);
+						req->complete = rndis_response_complete;
+						rndis_free_response(rndis->config, buf);
+						value = n;
+						rndis_command_queue(cdev->gadget->ep0, req, w_length, value);
+						break;
+					}
+					else {
+						pr_debug("[RNDIS] lastMsgType = %d, curMsgType = %d, \
+								value = %d\n", lastMsgType, curMsgType, value);
+						rndis_free_response(rndis->config, buf);
+					}
+				}
 			}
+			else {
+			buf = rndis_get_next_response(rndis->config, &n);
+				rndis_get_command(buf, &curMsgType);
+				while(buf) {
+					// send queued responses...
+					memcpy(req->buf, buf, n);
+					req->complete = rndis_response_complete;
+					rndis_free_response(rndis->config, buf);
+					value = n;
+
+					rndis_command_queue(cdev->gadget->ep0, req, w_length, value);
+
+					buf = rndis_get_next_response(rndis->config, &n);
+					if(buf == NULL) break;
+					rndis_get_command(buf, &curMsgType);
+
+					// let pc side know response availability...
+					rndis_response_available(rndis);
+					pr_debug("[RNDIS] lastMsgType = %d, curMsgType = %d,\
+							value = %d\n", lastMsgType, curMsgType, value);
+				}
+			}
+#ifdef CSY_DBG
 			CSY_DBG("USB_CDC_GET_ENCAPSULATED_COMMAND--\n");
+#endif
 			/* else stalls ... spec says to avoid that */
 		}
 		break;
@@ -552,19 +625,6 @@ invalid:
 		VDBG(cdev, "invalid control req%02x.%02x v%04x i%04x l%d\n",
 			ctrl->bRequestType, ctrl->bRequest,
 			w_value, w_index, w_length);
-	}
-
-	/* respond with data transfer or status phase? */
-	if (value >= 0) {
-		DBG(cdev, "rndis req%02x.%02x v%04x i%04x l%d\n",
-			ctrl->bRequestType, ctrl->bRequest,
-			w_value, w_index, w_length);
-		req->zero = (value < w_length);
-		req->length = value;
-		CSY_DBG("rndis_setup value>=0, req->length=0x%x\n", req->length);
-		value = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
-		if (value < 0)
-			ERROR(cdev, "rndis response on err %d\n", value);
 	}
 
 	/* device either stalls (value < 0) or reports success */
@@ -578,9 +638,10 @@ static int rndis_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	struct usb_composite_dev *cdev = f->config->cdev;
 
 	/* we know alt == 0 */
-
+#ifdef CSY_DBG
 	CSY_DBG("rndis_set_alt: intf=0x%x,rndis->ctrl_id=0x%x,rndis->data_id=0x%x,alt=0x%x",
 		intf, rndis->ctrl_id, rndis->data_id,alt);
+#endif
 	if (intf == rndis->ctrl_id) {
 		if (rndis->notify->driver_data) {
 			VDBG(cdev, "reset rndis control %d\n", intf);
@@ -629,7 +690,9 @@ static int rndis_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 		DBG(cdev, "RNDIS RX/TX early activation ... \n");
 		net = gether_connect(&rndis->port);
+#ifdef CSY_DBG
 		CSY_DBG("gether_connect ret=0x%p\n", net);
+#endif
 		if (IS_ERR(net))
 			return PTR_ERR(net);
 
@@ -885,6 +948,78 @@ static inline bool can_support_rndis(struct usb_configuration *c)
 	return true;
 }
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+static int rndis_set_interface_id(struct usb_function *f,
+	int intf_num,
+	int index_num)
+{
+	int ret = 0;
+	struct f_rndis		*rndis = func_to_rndis(f);
+
+	if (gadget_is_dualspeed(f->config->cdev->gadget)) {
+		if (index_num == 0) {
+			if (usb_change_interface_num(eth_hs_function,
+				f->hs_descriptors, &rndis_control_intf,
+				intf_num)) {
+				rndis->ctrl_id = intf_num;
+			}
+			usb_change_cdc_union_num(eth_hs_function,
+				f->hs_descriptors, &rndis_union_desc,
+				intf_num, 1);
+#ifndef CSY_SAMSUNG_NO_IAD
+			usb_change_iad_num(eth_hs_function,
+				f->hs_descriptors, &rndis_iad_descriptor,
+				intf_num);
+#endif
+			ret = 1;
+		} else if (index_num == 1) {
+			if (usb_change_interface_num(eth_hs_function,
+				f->hs_descriptors, &rndis_data_intf,
+				intf_num)) {
+				rndis->data_id = intf_num;
+			}
+			usb_change_cdc_union_num(eth_hs_function,
+				f->hs_descriptors, &rndis_union_desc,
+				intf_num, 0);
+			ret = 1;
+		} else {
+			printk(KERN_DEBUG "usb rndis has only 2 interface. please check it\n");
+		}
+	} else {
+		if (index_num == 0) {
+			if (usb_change_interface_num(eth_fs_function,
+				f->descriptors, &rndis_control_intf,
+				intf_num)) {
+				rndis->ctrl_id = intf_num;
+			}
+			usb_change_cdc_union_num(eth_fs_function,
+				f->descriptors, &rndis_union_desc,
+				intf_num, 1);
+#ifndef CSY_SAMSUNG_NO_IAD
+			usb_change_iad_num(eth_fs_function,
+				f->descriptors, &rndis_iad_descriptor,
+				intf_num);
+#endif
+			ret = 1;
+		} else if (index_num == 1) {
+			if (usb_change_interface_num(eth_fs_function,
+				f->descriptors, &rndis_data_intf,
+				intf_num)) {
+				rndis->data_id = intf_num;
+			}
+			usb_change_cdc_union_num(eth_fs_function,
+				f->descriptors, &rndis_union_desc,
+				intf_num, 0);
+			ret = 1;
+		} else {
+			printk(KERN_DEBUG "usb rndis has only 2 interface. please check it\n");
+		}
+
+	}
+	return ret;
+}
+#endif
+
 /**
  * rndis_bind_config - add RNDIS network link to a configuration
  * @c: the configuration to support the network link
@@ -967,6 +1102,9 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	/* start disabled */
 	rndis->port.func.disabled = 1;
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	rndis->port.func.set_intf_num = rndis_set_interface_id;
+#endif
 #endif
 
 	status = usb_add_function(c, &rndis->port.func);

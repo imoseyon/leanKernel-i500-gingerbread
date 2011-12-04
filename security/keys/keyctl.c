@@ -24,6 +24,14 @@
 #include <asm/uaccess.h>
 #include "internal.h"
 
+// change@wtl.ksingh - Ecryptfs payload conversion - starts
+#ifdef CONFIG_ECRYPTFS_ENABLED
+#include "../../fs/ecryptfs/ecryptfs_kernel.h"
+extern int isSecPayLoad(void *payload, long plen);
+extern void convertSecPayloadToEcryptfsPayload(void *secPayload, void *ecryptfs_kernel_payload);
+#endif // #ifdef CONFIG_ECRYPTFS_ENABLED
+// change@wtl.ksingh - Ecryptfs payload conversion - ends
+
 static int key_get_type_from_user(char *type,
 				  const char __user *_type,
 				  unsigned len)
@@ -63,6 +71,12 @@ SYSCALL_DEFINE5(add_key, const char __user *, _type,
 	key_ref_t keyring_ref, key_ref;
 	char type[32], *description;
 	void *payload;
+// change@wtl.ksingh - Ecryptfs payload conversion - starts
+#ifdef CONFIG_ECRYPTFS_ENABLED
+	void *secPayload = 0;
+	bool svm;
+#endif // #ifdef CONFIG_ECRYPTFS_ENABLED
+// change@wtl.ksingh - Ecryptfs payload conversion - ends
 	long ret;
 	bool vm;
 
@@ -87,19 +101,56 @@ SYSCALL_DEFINE5(add_key, const char __user *, _type,
 	vm = false;
 	if (_payload) {
 		ret = -ENOMEM;
-		payload = kmalloc(plen, GFP_KERNEL);
-		if (!payload) {
+
+// change@wtl.ksingh - Ecryptfs payload conversion - starts
+#ifdef CONFIG_ECRYPTFS_ENABLED
+		secPayload = kmalloc(plen, GFP_KERNEL);
+		if (!secPayload) {
 			if (plen <= PAGE_SIZE)
 				goto error2;
-			vm = true;
-			payload = vmalloc(plen);
-			if (!payload)
+			svm = true;
+			secPayload = vmalloc(plen);
+			if (!secPayload)
 				goto error2;
 		}
-
-		ret = -EFAULT;
-		if (copy_from_user(payload, _payload, plen) != 0)
+		
+		if (copy_from_user(secPayload, _payload, plen) != 0)
 			goto error3;
+
+		if(isSecPayLoad(_payload, plen)) {
+
+			plen = sizeof(struct ecryptfs_auth_tok);
+			payload = kmalloc(plen, GFP_KERNEL);
+			if (!payload) {
+				if (plen <= PAGE_SIZE)
+					goto error2;
+				vm = true;
+				payload = vmalloc(plen);
+				if (!payload) {
+					goto error2;
+				}
+			}
+			memset(payload, 0, plen);
+			convertSecPayloadToEcryptfsPayload(secPayload, payload);
+		} else {
+#endif // #ifdef CONFIG_ECRYPTFS_ENABLED
+			payload = kmalloc(plen, GFP_KERNEL);
+			if (!payload) {
+				if (plen <= PAGE_SIZE)
+					goto error2;
+				vm = true;
+				payload = vmalloc(plen);
+				if (!payload)
+					goto error2;
+			}
+
+			ret = -EFAULT;
+			if (copy_from_user(payload, _payload, plen) != 0)
+				goto error3;
+#ifdef CONFIG_ECRYPTFS_ENABLED
+		}
+#endif // #ifdef CONFIG_ECRYPTFS_ENABLED
+// change@wtl.ksingh - Ecryptfs payload conversion - ends
 	}
 
 	/* find the target keyring (which must be writable) */
@@ -124,10 +175,22 @@ SYSCALL_DEFINE5(add_key, const char __user *, _type,
 
 	key_ref_put(keyring_ref);
  error3:
+// change@wtl.ksingh - Ecryptfs payload conversion - starts
 	if (!vm)
 		kfree(payload);
-	else
-		vfree(payload);
+	else {
+		if(payload)
+			vfree(payload);
+	}
+#ifdef CONFIG_ECRYPTFS_ENABLED
+	if (!svm)
+		kfree(secPayload);
+	else {
+		if(secPayload)
+			vfree(secPayload);
+	}
+#endif //
+// change@wtl.ksingh - Ecryptfs payload conversion - ends
  error2:
 	kfree(description);
  error:

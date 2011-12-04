@@ -19,36 +19,35 @@
 #include <plat/gpio-cfg.h>
 #include <linux/fb.h>
 #include <linux/backlight.h>
-#include <mach/gpio-forte.h>
+#include <linux/earlysuspend.h>
+
 #define TRACE_CALL()        printk(KERN_ERR "%s\n", __func__)
 
 #define BD60910_I2C_ADDR        0xEC    // TODO:
+#define BD60910_I2C_BUS_NUM     13
 
 #define COMADJ_DEFAULT	97
 
 #define DAC_CH1		0
 #define DAC_CH2		1
 
-#define DIM_BL	11 //20
-#define MIN_BL	11 //45
-#define MAX_BL	255 //225
+#define DIM_BL	20
+#define MIN_BL	45
+#define MAX_BL	225
+
 
 #define CONFIG_FORTE_REV01
+#define CONFIG_BL_HAS_EARLYSUSPEND
+
 
 #ifdef  CONFIG_FORTE_REV01
-    #if 0  //HYH_20101109 : For Rev 0.2
     #define BL_ENABLE   S5PV210_GPG2(2)
     #define BL_SCL      S5PV210_GPJ2(1)
     #define BL_SDA      S5PV210_GPJ2(2)
-    #else
-    #define BL_ENABLE   S5PV210_GPG3(2)  //GPIO_DISPLAY_BL_EN
-    #define BL_SCL      S5PV210_GPJ3(5)  //GPIO_BL_SCL_28V
-    #define BL_SDA      S5PV210_GPJ3(4)  //GPIO_BL_SDA_28V
-    #endif
 #else
-    #define BL_ENABLE   S5PC11X_GPG2(2)
-    #define BL_SCL      S5PC11X_GPJ3(4)
-    #define BL_SDA      S5PC11X_GPJ3(5)
+    #define BL_ENABLE   S5PV210_GPG2(2)
+    #define BL_SCL      S5PV210_GPJ3(4)
+    #define BL_SDA      S5PV210_GPJ3(5)
 #endif
 
 struct bd60910_bl_data {
@@ -58,20 +57,18 @@ struct bd60910_bl_data {
 	int comadj;
 };
 
-//extern struct bd60910_bl_data backlight_lcd;
-
 static struct i2c_driver bd60910_bl_driver ;
 static struct i2c_client *bl_i2c_client = NULL;
 
 static int bd_brightness = 0;
-static int backlight_level = 0;   // disys_forte
+static int backlight_suspend = 0 ;
+int backlight_level = 0;   // disys_forte
 
 enum {
 	BACKLIGHT_LEVEL_OFF		= 0,
 	BACKLIGHT_LEVEL_DIMMING	= 1,
 	BACKLIGHT_LEVEL_NORMAL	= 6
 };
-
 
 int get_bl_update_status(void)
 {
@@ -82,13 +79,19 @@ EXPORT_SYMBOL(get_bl_update_status);
 
 static void bd60910_bl_set_backlight(struct bd60910_bl_data *data, int brightness)
 {
-    printk(KERN_ERR "brightness=%d\n", brightness) ;
+    printk(KERN_INFO "brightness=%d\n", brightness) ;
 
     if (brightness == bd_brightness)
         return ;
 
+    if (backlight_suspend)
+        return ;
+
     if (brightness == 0)
     {
+        extern void keyled_lcd_off_Ext(); /* keypad_led */ //board_bring
+        keyled_lcd_off_Ext();             /* keypad_led */
+      
         i2c_smbus_write_byte_data(data->i2c, 0x03, 0x00) ;
     	i2c_smbus_write_byte_data(data->i2c, 0x01, 0x00);
         bd_brightness = brightness ;
@@ -101,6 +104,9 @@ static void bd60910_bl_set_backlight(struct bd60910_bl_data *data, int brightnes
 
     if (bd_brightness == 0)
     {
+      extern void keyled_lcd_on_Ext(); /* keypad_led */ //board_bring
+      keyled_lcd_on_Ext();             /* keypad_led */
+
     	i2c_smbus_write_byte_data(data->i2c, 0x01, 0x01);
     	i2c_smbus_write_byte_data(data->i2c, 0x08, 0x10) ;
     }
@@ -120,7 +126,7 @@ static void bd60910_bl_set_backlight(struct bd60910_bl_data *data, int brightnes
    }
 
     /* change max 160 */
-    brightness = (148*brightness)/255; //160->148
+    brightness = (160*brightness)/255;
     //printk(KERN_ERR "brightness change =%d\n", brightness) ;
 
     i2c_smbus_write_byte_data(data->i2c, 0x03, ((brightness >> 1) & 0x7F)) ;    /* (0~255) --> (0~127) */
@@ -166,20 +172,49 @@ static struct backlight_ops bl_ops = {
 };
 // end cmk
 
-#if 1 /* New-Style */
+#undef  BD60910_DRIVER_LEGACY
+#ifndef BD60910_DRIVER_LEGACY /* New-Style */
+#ifdef  CONFIG_BL_HAS_EARLYSUSPEND
+static struct early_suspend	bl_early_suspend ;
+
+void bd60910_bl_early_suspend(struct early_suspend *h)
+{
+	struct bd60910_bl_data *data ;
+
+    TRACE_CALL() ;
+    if (bl_i2c_client == NULL)
+        return ;
+
+    data = i2c_get_clientdata(bl_i2c_client);
+	bd60910_bl_set_backlight(data, 0);
+    backlight_suspend = 1 ;
+}
+
+void bd60910_bl_late_resume(struct early_suspend *h)
+{
+	struct bd60910_bl_data *data ;
+
+    TRACE_CALL() ;
+    if (bl_i2c_client == NULL)
+        return ;
+
+    backlight_suspend = 0 ;
+    data = i2c_get_clientdata(bl_i2c_client);
+	backlight_update_status(data->bl);
+}
+#endif
+
 static int __devinit bd60910_bl_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
 	struct bd60910_bl_data *data = kzalloc(sizeof(struct bd60910_bl_data), GFP_KERNEL);
 	int ret = 0;
-
     TRACE_CALL() ;
 	if (!data)
 		return -ENOMEM;
-
     // FORTE	data->comadj = sharpsl_param.comadj == -1 ? COMADJ_DEFAULT : sharpsl_param.comadj;
 
-	ret = gpio_request(BL_ENABLE, "backlight");
+        ret = gpio_request(BL_ENABLE, "backlight");
 	if (ret) {
 		dev_dbg(&data->bl->dev, "Unable to request gpio!\n");
 		goto err_gpio_bl;
@@ -187,20 +222,28 @@ static int __devinit bd60910_bl_probe(struct i2c_client *client,
 	ret = gpio_direction_output(BL_ENABLE, 1);      // TODO: FORTE Rev0.1 timing ???
 	if (ret)
 		goto err_gpio_dir;
-
 	i2c_set_clientdata(client, data);
 	data->i2c = client;
-    printk("SUNISH Back Light probe\n\n\n");        
-         data->bl = backlight_device_register("s5p_bl" , &client->dev,data, &bl_ops,NULL);
+        bl_i2c_client = client ;
+	data->bl = backlight_device_register("s5p_bl" /*"bd60910"*/, &client->dev,
+			data, &bl_ops, NULL); /* YUNG@DISYS GB */
 	if (IS_ERR(data->bl)) {
 		ret = PTR_ERR(data->bl);
 		goto err_reg;
 	}
+
 	data->bl->props.brightness = 69;
 	data->bl->props.max_brightness = 255 ;
 	data->bl->props.power = FB_BLANK_UNBLANK;
 
 	backlight_update_status(data->bl);
+ 
+#ifdef CONFIG_BL_HAS_EARLYSUSPEND
+	bl_early_suspend.suspend = bd60910_bl_early_suspend;
+	bl_early_suspend.resume =  bd60910_bl_late_resume;
+	bl_early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN;
+	register_early_suspend(&bl_early_suspend);
+#endif
 
 	return 0;
 
@@ -230,7 +273,7 @@ static int __devexit bd60910_bl_remove(struct i2c_client *client)
 	return 0;
 }
 
-#ifdef CONFIG_PM
+#if defined(CONFIG_PM) && !defined(CONFIG_BL_HAS_EARLYSUSPEND)
 static int bd60910_bl_suspend(struct i2c_client *client, pm_message_t pm)
 {
 	struct bd60910_bl_data *data = i2c_get_clientdata(client);
@@ -257,7 +300,7 @@ static int bd60910_bl_resume(struct i2c_client *client)
 #else   /* Legacy Style */
 static unsigned short   bl_ignore[] = {I2C_CLIENT_END };
 static unsigned short   bl_normal[] = {I2C_CLIENT_END };
-static unsigned short   bl_probe[]  = {11, (BD60910_I2C_ADDR >> 1), I2C_CLIENT_END };
+static unsigned short   bl_probe[]  = {BD60910_I2C_BUS_NUM, (BD60910_I2C_ADDR >> 1), I2C_CLIENT_END };
 const static struct i2c_client_address_data bl_addr_data = {
 	.normal_i2c	= bl_normal,
 	.ignore		= bl_ignore,
@@ -308,16 +351,16 @@ static int bd60910_detach_client(struct i2c_client *client)
 #endif  /* new-style or legacy-style */
 
 static const struct i2c_device_id bd60910_bl_id[] = {
-	{ "bl_bd60910", 0 },
+	{ "bd60910-i2c", 0 },
 	{ },
 };
 
 static struct i2c_driver bd60910_bl_driver = {
 	.driver = {
-		.name		= "bl_bd60910",
+		.name		= "bd60910-i2c",
 		.owner		= THIS_MODULE,
 	},
-#if 0   //  legacy style
+#ifdef BD60910_DRIVER_LEGACY  //  legacy style
 	.id 		= 0,
 	.attach_adapter	= bd60910_attach_adapter,
 	.detach_client	= bd60910_detach_client,
@@ -334,7 +377,7 @@ static struct i2c_driver bd60910_bl_driver = {
 
 static int __init bd60910_bl_init(void)
 {
-#if 0
+#ifdef BD60910_DRIVER_LEGACY
     TRACE_CALL() ;
 
 	return i2c_add_driver(&bd60910_bl_driver);
@@ -344,32 +387,33 @@ static int __init bd60910_bl_init(void)
     int ret ;
 
     TRACE_CALL() ;
-
+#if 0
     // backlight_check {{
     s3c_gpio_cfgpin(GPIO_DISPLAY_ID, S3C_GPIO_INPUT);
 	s3c_gpio_setpull(GPIO_DISPLAY_ID, S3C_GPIO_PULL_UP);
     ret = gpio_get_value(GPIO_DISPLAY_ID);
-    if(ret)
+    if(0/*ret*/) // for chief
     {
         printk(KERN_ERR "===============================================\n");
         printk(KERN_ERR "             NOT CONNECT BACKLIGHT");
         printk(KERN_ERR "===============================================\n");
-        s3c_gpio_setpull(GPIO_DISPLAY_ID, S3C_GPIO_PULL_NONE);        
-        
+        s3c_gpio_setpull(GPIO_DISPLAY_ID, S3C_GPIO_PULL_NONE);
+
         s3c_gpio_cfgpin(BL_SCL, S3C_GPIO_INPUT);
         s3c_gpio_setpull(BL_SCL, S3C_GPIO_PULL_NONE);
-        
+
         s3c_gpio_cfgpin(BL_SDA, S3C_GPIO_INPUT);
         s3c_gpio_setpull(BL_SCL, S3C_GPIO_PULL_NONE);
-        
+
         gpio_direction_output(BL_ENABLE, GPIO_LEVEL_LOW);
         return;
     }
     // backlight_check }}
-    
+#endif
     ret = i2c_add_driver(&bd60910_bl_driver) ;
     if (ret != 0)
     {
+        printk(KERN_ERR "%s i2c fail %d\n", __FUNCTION__, ret) ;
         return ret ;
     }
 
@@ -377,10 +421,10 @@ static int __init bd60910_bl_init(void)
     info.addr = BD60910_I2C_ADDR>>1 ;
     strlcpy(info.type, "bd60910-i2c", I2C_NAME_SIZE) ;
 
-    adapter = i2c_get_adapter(11) ; //
+    adapter = i2c_get_adapter(BD60910_I2C_BUS_NUM) ; // TODO:
     if (!adapter)
     {
-        printk(KERN_ERR "not found apater i2c %d\n", 11) ;
+        printk(KERN_ERR "not found apater i2c %d\n", BD60910_I2C_BUS_NUM) ;
         goto err_driver ;
     }
 

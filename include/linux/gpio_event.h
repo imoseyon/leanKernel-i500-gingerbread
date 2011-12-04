@@ -101,7 +101,6 @@ enum gpio_event_direct_flags {
 };
 
 struct gpio_event_direct_entry {
-	uint32_t invert_polarity;
 	uint32_t gpio:16;
 	uint32_t code:10;
 	uint32_t dev:6;

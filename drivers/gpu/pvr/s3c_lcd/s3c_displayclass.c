@@ -54,11 +54,7 @@ static int fb_idx = 0;
 #define S3C_DISPLAY_FORMAT_NUM 1
 #define S3C_DISPLAY_DIM_NUM 1
 
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-#define VSYCN_IRQ 246
-#else
 #define VSYCN_IRQ 0x61
-#endif
 
 #define DC_S3C_LCD_COMMAND_COUNT 1
 
@@ -155,6 +151,34 @@ static S3C_LCD_DEVINFO *g_psLCDInfo = NULL;
 
 extern IMG_BOOL IMG_IMPORT PVRGetDisplayClassJTable(PVRSRV_DC_DISP2SRV_KMJTABLE *psJTable);
 
+static inline unsigned long RoundUpToMultiple(unsigned long x, unsigned long y)
+{
+        unsigned long div = x / y;
+        unsigned long rem = x % y;
+
+        return (div + ((rem == 0) ? 0 : 1)) * y;
+}
+
+static unsigned long GCD(unsigned long x, unsigned long y)
+{
+        while (y != 0)
+        {
+                unsigned long r = x % y;
+                x = y;
+                y = r;
+        }
+
+        return x;
+}
+
+static unsigned long LCM(unsigned long x, unsigned long y)
+{
+        unsigned long gcd = GCD(x, y);
+
+        return (gcd == 0) ? 0 : ((x / gcd) * y);
+}
+
+
 static void AdvanceFlipIndex(S3C_LCD_DEVINFO *psDevInfo,
 							 unsigned long	*pulIndex)
 {
@@ -188,22 +212,12 @@ static IMG_VOID ResetVSyncFlipItems(S3C_LCD_DEVINFO* psDevInfo)
 	}
 }
 
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-extern char image_update;
-extern char EGL_ready;
-#endif
-
 static IMG_VOID S3C_Flip(S3C_LCD_DEVINFO  *psDevInfo,
 					   S3C_FRAME_BUFFER *fb)
 {
 	struct fb_var_screeninfo sFBVar;
 	int res;
 	unsigned long ulYResVirtual;
-
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-	image_update = 1;
-	EGL_ready = 1;
-#endif
 
 	acquire_console_sem();
 
@@ -224,7 +238,8 @@ static IMG_VOID S3C_Flip(S3C_LCD_DEVINFO  *psDevInfo,
 		res = fb_set_var(psDevInfo->psFBInfo, &sFBVar);
 		if (res != 0)
 		{
-			printk("%s: fb_set_var failed (Y Offset: %d, Error: %d)\n", __FUNCTION__, fb->yoffset, res);	}
+			printk("%s: fb_set_var failed (Y Offset: %d, Error: %d)\n", __FUNCTION__, fb->yoffset, res);
+		}
 	}
 	else
 	{
@@ -256,7 +271,6 @@ static void FlushInternalVSyncQueue(S3C_LCD_DEVINFO*psDevInfo)
 
 		if(psFlipItem->bCmdCompleted == S3C_FALSE)
 		{
-
 			psDevInfo->sPVRJTable.pfnPVRSRVCmdComplete((IMG_HANDLE)psFlipItem->hCmdComplete, IMG_FALSE);
 		}
 
@@ -273,7 +287,6 @@ static void FlushInternalVSyncQueue(S3C_LCD_DEVINFO*psDevInfo)
 	psDevInfo->ulRemoveIndex = 0;
 
 	mutex_unlock(&psDevInfo->sVsyncFlipItemMutex);
-
 }
 
 static void VsyncWorkqueueFunc(struct work_struct *psWork)
@@ -292,22 +305,14 @@ static void VsyncWorkqueueFunc(struct work_struct *psWork)
 	
 	while(psFlipItem->bValid)
 	{
-
 		if(psFlipItem->bFlipped)
 		{
-		
 			if(!psFlipItem->bCmdCompleted)
 			{
 				IMG_BOOL bScheduleMISR;
 			
-#if 0
 				bScheduleMISR = IMG_TRUE;
-#else
-				bScheduleMISR = IMG_FALSE;
-#endif
-
 				psDevInfo->sPVRJTable.pfnPVRSRVCmdComplete((IMG_HANDLE)psFlipItem->hCmdComplete, bScheduleMISR);
-			
 				psFlipItem->bCmdCompleted = S3C_TRUE;
 			}
 
@@ -369,7 +374,6 @@ static irqreturn_t S3C_VSyncISR(int irq, void *dev_id)
 	{
 		return IRQ_NONE;
 	}
-
 	queue_work(g_psLCDInfo->psWorkQueue, &g_psLCDInfo->sWork);
 
 	return IRQ_HANDLED;
@@ -377,11 +381,7 @@ static irqreturn_t S3C_VSyncISR(int irq, void *dev_id)
 
 static IMG_VOID S3C_InstallVsyncISR(void)
 {	
-#ifdef CONFIG_S5PV210_GARNETT_DELTA
-	if(request_irq(VSYCN_IRQ, S3C_VSyncISR, IRQF_SHARED | IRQF_TRIGGER_RISING , "s3cfb", g_psLCDInfo))
-#else
 	if(request_irq(VSYCN_IRQ, S3C_VSyncISR, IRQF_SHARED , "s3cfb", g_psLCDInfo))
-#endif
 	{
 		printk("S3C_InstallVsyncISR: Couldn't install system LISR on IRQ %d", VSYCN_IRQ);
 		return;
@@ -785,10 +785,7 @@ static IMG_BOOL ProcessFlip(IMG_HANDLE	hCmdCookie,
 
 	if(psFlipCmd->ui32SwapInterval == 0)
 	{
-
-	
 		S3C_Flip(psDevInfo, fb);
-	
 
 		psDevInfo->sPVRJTable.pfnPVRSRVCmdComplete(hCmdCookie, IMG_FALSE);
 	
@@ -973,13 +970,18 @@ int s3c_displayclass_init(void)
 		g_psLCDInfo->sSysBuffer.yoffset = 0;
 		byteSize = screen_w * screen_h * bytes_per_pixel;
 		g_psLCDInfo->sSysBuffer.byteSize = (IMG_UINT32)byteSize;
-
+		printk("[SGX] : screen_h : %d \tscreen_w : %d\n",screen_h,screen_w);
+		byteSize = RoundUpToMultiple(g_psLCDInfo->sSysBuffer.byteSize,LCM(screen_h,4096));
+		printk("[SGX] : %ld\n",LCM(screen_h,4096));
+		printk("[SGX] : %d\n",g_psLCDInfo->sSysBuffer.byteSize);
+		printk("[SGX] : byteSize:%d\n",byteSize);
+		printk("[SGX] : byteSize/(screen_h*bytes_per_pixel) = %d\n",byteSize/(screen_w*4));
 		for (i=0 ; i < num_of_backbuffer; i++)
 		{
 			g_psLCDInfo->asBackBuffers[i].byteSize = g_psLCDInfo->sSysBuffer.byteSize;
 			g_psLCDInfo->asBackBuffers[i].bufferPAddr.uiAddr = pa_fb + byteSize * (i+1);
 			g_psLCDInfo->asBackBuffers[i].bufferVAddr = (IMG_CPU_VIRTADDR)phys_to_virt(g_psLCDInfo->asBackBuffers[i].bufferPAddr.uiAddr);
-			g_psLCDInfo->asBackBuffers[i].yoffset = screen_h * (i + 1);
+			g_psLCDInfo->asBackBuffers[i].yoffset = byteSize/(screen_w*bytes_per_pixel) * (i + 1);
 		
 			printk("Back frameBuffer[%d].VAddr=%p PAddr=%p size=%d\n",
 				i, 
