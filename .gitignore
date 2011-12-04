@@ -49,3 +49,13 @@ arch/arm/kernel/vmlinux.lds
 initramfs_root/kernel_version
 usr/gen_init_cpio
 usr/initramfs_data.cpio.lzma
+initramfs_root/lib/modules/lzo_compress.ko
+initramfs_root/lib/modules/lzo_decompress.ko
+lib/gen_crc32table
+scripts/basic/docproc
+scripts/basic/fixdep
+scripts/basic/hash
+scripts/conmakehash
+scripts/kallsyms
+scripts/mod/mk_elfconfig
+scripts/mod/modpost

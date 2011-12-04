@@ -66,7 +66,7 @@ struct i2c_touchkey_driver {
 struct i2c_touchkey_driver *touchkey_driver = NULL;
 
 static int touchkey_keycode[5] =
-    { NULL, KEY_BACK, KEY_MENU, KEY_ENTER, KEY_END };
+    { 0, KEY_BACK, KEY_MENU, KEY_ENTER, KEY_END };
 
 static int touchkey_enable = 0;
 
@@ -731,7 +731,7 @@ static int cypress_touchkey_probe(struct i2c_client *client,
 	return 0;
 
 err_req_irq:
-err_backlight_on:
+//err_backlight_on:
 err_read:
 	
 	if(devdata->pdata->touchkey_onoff)
