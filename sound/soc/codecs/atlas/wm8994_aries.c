@@ -27,7 +27,7 @@
 /*
  * Debug Feature
  */
-#define SUBJECT "wm8994_crespo.c"
+#define SUBJECT "wm8994_aries.c"
 
 #ifdef FEATURE_SS_AUDIO_CAL
 extern unsigned int tty_mode;
@@ -39,6 +39,32 @@ extern void FSA9480_Enable_SPK(u8 enable);
 /*
  * Definitions of tunning volumes for wm8994
  */
+ 
+// valid values for incall boost are (0 .. 3) << WM8994_AIF2DAC_BOOST_SHIFT
+// .. meaning you only change the number below, not the shift, and you only
+// make it one of:
+// 0 ( 0db  = too quiet), 
+// 1 (+6db  = quiet), 
+// 2 (+12db = loud), 
+// 3 (+18db = holy shit)
+unsigned short incall_boost_rcv  = (2 << WM8994_AIF2DAC_BOOST_SHIFT);
+unsigned short incall_boost_bt   = (2 << WM8994_AIF2DAC_BOOST_SHIFT);
+unsigned short incall_boost_spk  = (2 << WM8994_AIF2DAC_BOOST_SHIFT);
+unsigned short incall_boost_hp   = (2 << WM8994_AIF2DAC_BOOST_SHIFT);
+
+
+// valid values for in-call mic gain are 0 .. 0x1f (31 decimal)
+// 0 means -16.5db
+// 0x0b means 0db
+// 0x1f means +30db
+unsigned short incall_mic_gain_rcv       = 0x13;
+unsigned short incall_mic_gain_spk       = 0x1f;
+unsigned short incall_mic_gain_hp        = 0x1d;
+unsigned short incall_mic_gain_hp_no_mic = 0x12;
+
+void update_mic_gain(unsigned short gain);
+
+ 
 struct gain_info_t playback_gain_table[PLAYBACK_GAIN_NUM] = {
 	{ /* COMMON */
 		.mode = COMMON_SET_BIT,
@@ -1810,6 +1836,12 @@ void wm8994_set_voicecall_receiver(struct snd_soc_codec *codec)
 		wm8994_write(codec, 0x001F, 0x0000);	// HPOUT2 Volume
 	}
 
+  // receive call audio boost
+  wm8994_write(codec, 0x0311, incall_boost_rcv);
+  
+  // incall mic gain
+  wm8994_write(codec, 0x0018, WM8994_IN1L_VU | incall_mic_gain_rcv);
+
 	wm8994_write(codec, 0x0015, 0x0000);	
 	wm8994_write(codec, 0x0038, 0x0040);	// Anti Pop 1
 	wm8994_write(codec, 0x0006, 0x0000);	// Power Management 6. Prevent the mute when the audio transfer is executed from the bluetooth.
@@ -1870,7 +1902,8 @@ void wm8994_set_voicecall_headset(struct snd_soc_codec *codec)
 	{
 		wm8994_write(codec, 0x0310, 0xC118);	// AIF2 Control 1
 	}
-	wm8994_write(codec, 0x0311, 0x0000);	// AIF2 Control 2
+	wm8994_write(codec, 0x0311, incall_boost_hp);	// AIF2 Control 2
+	update_mic_gain(incall_mic_gain_hp);
 	wm8994_write(codec, 0x0520, 0x0080);	// AIF2 DAC Filter1
 	wm8994_write(codec, 0x0204, 0x0019);	// AIF2 Clocking 1
 
@@ -2107,15 +2140,21 @@ void wm8994_set_voicecall_headphone(struct snd_soc_codec *codec)
 	wm8994_write(codec, 0x0420, 0x0080);	// AIF1 DAC1 Filter1
 
 	/* Input Path Volume */
-	wm8994_write(codec, 0x0018, 0x0116);	// Left Line Input 1&2 Volume
+	//wm8994_write(codec, 0x0018, 0x0116);	// Left Line Input 1&2 Volume
+	update_mic_gain(incall_mic_gain_hp_no_mic);
 	wm8994_write(codec, 0x0612, 0x01C0);	// DAC2 Left Volume
 	wm8994_write(codec, 0x0603, 0x018C);	// DAC2 Mixer Volumes
+	
+	
 
 	/* Output Path Volume */
 	wm8994_write(codec, 0x0031, 0x0000);	// Output Mixer 5
 	wm8994_write(codec, 0x0032, 0x0000);	// Outupt Mixer 6
 	wm8994_write(codec, 0x0020, 0x0179);	// Left OPGA Volume
 	wm8994_write(codec, 0x0021, 0x0179);	// Right OPGA Volume
+	
+	wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_hp);
+	
 #if 1
 	if(tty_mode == TTY_MODE_FULL || tty_mode == TTY_MODE_VCO)
 	{
@@ -2230,9 +2269,12 @@ void wm8994_set_voicecall_speaker(struct snd_soc_codec *codec)
 	wm8994_write(codec, 0x0612, 0x01C0);	// DAC2 Left Volume
 	wm8994_write(codec, 0x0613, 0x01C0);	// DAC2 Right Volume
 	wm8994_write(codec, 0x0500, 0x01EF);	// AIF2 ADC Left Volume
+	update_mic_gain(incall_mic_gain_spk);
 
 	/* Output Path Volume */
 	wm8994_write(codec, 0x0022, 0x0000);	// SPKMIXL Attenuation
+	wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_spk);
+	
 #if 1
 	wm8994_write(codec, 0x0026, 0x017E);	// Speaker Volume Left
 #else
@@ -2317,6 +2359,8 @@ void wm8994_set_voicecall_bluetooth(struct snd_soc_codec *codec)
 	wm8994_write(codec, 0x0604, 0x0007);	// DAC2 Left Mixer Routing(Playback)
 	wm8994_write(codec, 0x0605, 0x0007);	// DAC2 Right Mixer(Playback)
 	wm8994_write(codec, 0x0015, 0x0040);	
+
+  wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_bt);
 
 	/* Output Path Routing */
 	wm8994_write(codec, 0x004C, 0x1F25);	// Charge Pump 1
