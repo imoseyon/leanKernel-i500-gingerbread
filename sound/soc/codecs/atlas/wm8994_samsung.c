@@ -56,6 +56,12 @@
 #define HDMI_USE_AUDIO
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
+#define DECLARE_WM8994(codec) struct wm8994_priv *wm8994 = codec->drvdata;
+#else
+#define DECLARE_WM8994(codec) struct wm8994_priv *wm8994 = codec->private_data;
+#endif
+
 // call volume boost hack
 extern unsigned short incall_boost_rcv;
 extern unsigned short incall_boost_bt;
@@ -3740,7 +3746,7 @@ static ssize_t incall_boost_rcv_store( struct device *dev,
 		
 		incall_boost_rcv = newval << WM8994_AIF2DAC_BOOST_SHIFT;
 		
-		wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_rcv);
+		wm8994_write(wm8994_codec, WM8994_AIF2_CONTROL_2, incall_boost_rcv);
 	}
 	return size;
 }
@@ -3768,7 +3774,7 @@ static ssize_t incall_boost_bt_store( struct device *dev,
 		
 		incall_boost_bt = newval << WM8994_AIF2DAC_BOOST_SHIFT;
 		
-		wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_bt);
+		wm8994_write(wm8994_codec, WM8994_AIF2_CONTROL_2, incall_boost_bt);
 	}
 	return size;
 }
@@ -3795,7 +3801,7 @@ static ssize_t incall_boost_spk_store( struct device *dev,
 		
 		incall_boost_spk = newval << WM8994_AIF2DAC_BOOST_SHIFT;
 		
-		wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_spk);
+		wm8994_write(wm8994_codec, WM8994_AIF2_CONTROL_2, incall_boost_spk);
 	}
 	return size;
 }
@@ -3822,17 +3828,17 @@ static ssize_t incall_boost_hp_store( struct device *dev,
 		
 		incall_boost_hp = newval << WM8994_AIF2DAC_BOOST_SHIFT;
 		
-		wm8994_write(codec, WM8994_AIF2_CONTROL_2, incall_boost_hp);
+		wm8994_write(wm8994_codec, WM8994_AIF2_CONTROL_2, incall_boost_hp);
 	}
 	return size;
 }
 
 void update_mic_gain(unsigned short gain)
 {
-	unsigned short val = wm8994_read(codec, WM8994_LEFT_LINE_INPUT_1_2_VOLUME );
+	unsigned short val = wm8994_read(wm8994_codec, WM8994_LEFT_LINE_INPUT_1_2_VOLUME );
 	val &= ~WM8994_IN1L_VOL_MASK;
 	val |= WM8994_IN1L_VU | gain;
-	wm8994_write(codec, WM8994_LEFT_LINE_INPUT_1_2_VOLUME, val);
+	wm8994_write(wm8994_codec, WM8994_LEFT_LINE_INPUT_1_2_VOLUME, val);
 }
 
 static ssize_t incall_mic_gain_rcv_show( struct device* dev, 
@@ -3846,7 +3852,7 @@ static ssize_t incall_mic_gain_rcv_store( struct device *dev,
 				      	  struct device_attribute *attr,
 				      	  const char *buf, size_t size)
 {
-	DECLARE_WM8994(codec);
+	DECLARE_WM8994(wm8994_codec);
 	
 	unsigned short newGain = 0;
 	if ( sscanf( buf, "%hd", &newGain ) == 1 )
@@ -3880,7 +3886,7 @@ static ssize_t incall_mic_gain_spk_store( struct device *dev,
 				      	  struct device_attribute *attr,
 				      	  const char *buf, size_t size)
 {
-	DECLARE_WM8994(codec);
+	DECLARE_WM8994(wm8994_codec);
 	
 	unsigned short newGain = 0;
 	if ( sscanf( buf, "%hd", &newGain ) == 1 )
@@ -3912,7 +3918,7 @@ static ssize_t incall_mic_gain_hp_store( struct device *dev,
 				      	  struct device_attribute *attr,
 				      	  const char *buf, size_t size)
 {
-	DECLARE_WM8994(codec);
+	DECLARE_WM8994(wm8994_codec);
 	
 	unsigned short newGain = 0;
 	if ( sscanf( buf, "%hd", &newGain ) == 1 )
@@ -3944,7 +3950,7 @@ static ssize_t incall_mic_gain_hp_no_mic_store( struct device *dev,
 				      	  struct device_attribute *attr,
 				      	  const char *buf, size_t size)
 {
-	DECLARE_WM8994(codec);
+	DECLARE_WM8994(wm8994_codec);
 	
 	unsigned short newGain = 0;
 	if ( sscanf( buf, "%hd", &newGain ) == 1 )
