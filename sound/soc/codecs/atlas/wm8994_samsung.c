@@ -4018,7 +4018,7 @@ static struct attribute_group wm8994_call_audio_group = {
 
 static struct miscdevice wm8994_call_audio_device = {
   .minor = MISC_DYNAMIC_MINOR,
-  .name  = wm8994_call_audio,
+  .name  = "wm8994_call_audio",
 };
 
 static int wm8994_probe(struct platform_device *pdev)
