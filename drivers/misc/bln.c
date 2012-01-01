@@ -401,4 +401,3 @@ static int __init bln_control_init(void)
 }
 
 device_initcall(bln_control_init);
-
