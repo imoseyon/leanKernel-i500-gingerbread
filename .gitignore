@@ -50,3 +50,4 @@ usr/gen_init_cpio
 .tmp*
 include/generated/asm-offsets.h
 include/generated/bounds.h
+initramfs_root/kernel_version
